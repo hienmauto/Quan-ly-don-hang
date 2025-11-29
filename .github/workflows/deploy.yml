@@ -1,0 +1,17 @@
+name: Deploy to Firebase Hosting
+on:
+  push:
+    branches:
+      - main
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy to Firebase
+        # Thay thế PROJECT_ID bằng ID dự án của bạn (lấy từ ảnh trước)
+        run: firebase deploy --only hosting --token "${{ secrets.FIREBASE_TOKEN }}" --project "project-quan-ly-don-hang"
