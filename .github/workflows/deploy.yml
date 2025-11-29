@@ -4,14 +4,29 @@ on:
     branches:
       - main
 jobs:
-  deploy:
+  build_and_deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
+      # 1. Cài đặt Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 2. Cài đặt thư viện (npm install)
+      - name: Install Dependencies
+        run: npm install
+
+      # 3. Đóng gói code (npm run build) -> Tạo ra thư mục 'dist'
+      - name: Build
+        run: npm run build
+
+      # 4. Cài đặt Firebase Tools
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
+      # 5. Đẩy thư mục 'dist' lên Firebase
       - name: Deploy to Firebase
-        # Thay thế PROJECT_ID bằng ID dự án của bạn (lấy từ ảnh trước)
-        run: firebase deploy --only hosting --token "${{ secrets.FIREBASE_TOKEN }}" --project "project-quan-ly-don-hang"
+        run: firebase deploy --only hosting --token "${{ secrets.FIREBASE_TOKEN }}" --project "project-quan-ly-don-hang" --message "Auto deploy from GitHub"
