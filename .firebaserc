@@ -1,0 +1,13 @@
+{
+  "projects": {},
+  "targets": {
+    "project-quan-ly-don-hang": {
+      "hosting": {
+        "live": [
+          "project-quan-ly-don-hang"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
