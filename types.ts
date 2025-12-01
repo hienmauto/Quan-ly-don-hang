@@ -56,3 +56,29 @@ export interface DashboardStats {
   pendingOrders: number;
   avgOrderValue: number;
 }
+
+// --- AUTH TYPES ---
+
+export type Role = 'admin' | 'user' | string;
+
+export type Permission = 
+  | 'view_dashboard'
+  | 'view_orders'
+  | 'add_orders'      // Mới: Thêm đơn
+  | 'edit_orders'     // Mới: Sửa đơn/trạng thái
+  | 'delete_orders'   // Mới: Xóa đơn
+  | 'view_customers'
+  | 'view_settings_personal' // Mới: Cài đặt cá nhân
+  | 'view_settings_admin'    // Mới: Cài đặt hệ thống (Admin)
+  | 'view_settings_roles';   // Mới: Quản lý tên vai trò
+
+export interface User {
+  username: string;
+  password?: string; // Trong thực tế nên hash, ở đây lưu localstorage demo
+  fullName: string;
+  email: string;
+  phone: string;
+  role: Role;
+  permissions: Permission[];
+  isActive: boolean;
+}

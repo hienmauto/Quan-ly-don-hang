@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  LayoutDashboard, ShoppingCart, Users, Settings, 
-  Menu, Bell, Search, PlusCircle, LogOut, Loader2, X 
+  LayoutDashboard, ShoppingCart, Users, Settings as SettingsIcon, 
+  Menu, Bell, PlusCircle, LogOut, Loader2, X 
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import { OrderList } from './components/OrderList';
 import OrderModal from './components/OrderModal';
 import { Toast } from './components/Toast';
-import { Order, OrderStatus, Product, ViewState } from './types';
+import Login from './components/Login';
+import Settings from './components/Settings';
+import { Order, OrderStatus, Product, ViewState, User, Permission } from './types';
+import { getCurrentUser, logout as performLogout } from './services/authService';
 import { 
   fetchOrdersFromSheet, 
   updateBatchOrdersInSheet, 
@@ -27,9 +30,14 @@ const MOCK_PRODUCTS: Product[] = [
 ];
 
 const App: React.FC = () => {
+  // --- Auth State ---
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+
+  // --- App State ---
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
   
-  // Initialize Sidebar state based on screen width (Desktop default open, Mobile default closed)
+  // Initialize Sidebar state based on screen width
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth >= 768;
@@ -38,40 +46,86 @@ const App: React.FC = () => {
   });
 
   const [orders, setOrders] = useState<Order[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  // Fetch data from Google Sheet on mount
+  // Check Auth on Mount
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      const sheetOrders = await fetchOrdersFromSheet();
-      setOrders(sheetOrders);
-      setIsLoading(false);
-    };
-    loadData();
+    const user = getCurrentUser();
+    if (user) {
+      setCurrentUser(user);
+    }
+    setIsAuthChecking(false);
   }, []);
 
-  // Handlers
+  // Fetch data from Google Sheet on mount (only if authenticated)
+  useEffect(() => {
+    if (currentUser) {
+      const loadData = async () => {
+        setIsLoading(true);
+        const sheetOrders = await fetchOrdersFromSheet();
+        setOrders(sheetOrders);
+        setIsLoading(false);
+      };
+      loadData();
+    }
+  }, [currentUser]);
+
+  // --- Permission Helpers ---
+  const hasPermission = (perm: Permission) => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'admin') return true;
+    return currentUser.permissions.includes(perm);
+  };
+
+  // --- Handlers ---
+  const handleLoginSuccess = (user: User) => {
+    setCurrentUser(user);
+    // Set default view based on permissions
+    if (user.role !== 'admin' && !user.permissions.includes('view_dashboard')) {
+       if (user.permissions.includes('view_orders')) setCurrentView('orders');
+       else if (user.permissions.includes('view_settings_personal') || user.permissions.includes('view_settings_admin')) setCurrentView('settings');
+    }
+  };
+
+  const handleLogout = () => {
+    performLogout();
+    setCurrentUser(null);
+    setCurrentView('dashboard');
+  };
+
   const handleAddOrder = () => {
+    if (!hasPermission('add_orders')) {
+      setToast({ message: 'Bạn không có quyền thêm đơn hàng', type: 'error' });
+      return;
+    }
     setEditingOrder(null);
     setIsModalOpen(true);
   };
 
   const handleEditOrder = (order: Order) => {
+    if (!hasPermission('edit_orders')) {
+      setToast({ message: 'Bạn không có quyền sửa đơn hàng', type: 'error' });
+      return;
+    }
     setEditingOrder(order);
     setIsModalOpen(true);
   };
 
   const handleDeleteOrder = async (id: string) => {
+    if (!hasPermission('delete_orders')) {
+      setToast({ message: 'Bạn không có quyền xóa đơn hàng', type: 'error' });
+      return;
+    }
     if (confirm('Bạn có chắc chắn muốn xóa đơn hàng này?')) {
       handleBulkDelete([id]);
     }
   };
 
   const handleStatusChange = (id: string, newStatus: OrderStatus) => {
+    if (!hasPermission('edit_orders')) return;
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
   };
 
@@ -79,6 +133,11 @@ const App: React.FC = () => {
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   const handleBulkUpdate = async (ids: string[], updates: { status?: OrderStatus, templateStatus?: string }) => {
+    if (!hasPermission('edit_orders')) {
+      setToast({ message: 'Bạn không có quyền cập nhật đơn hàng', type: 'error' });
+      return;
+    }
+
     const updatedOrders = orders.map(o => {
       if (ids.includes(o.id)) {
         return { 
@@ -116,6 +175,11 @@ const App: React.FC = () => {
   };
   
   const handleBulkDelete = async (ids: string[]) => {
+    if (!hasPermission('delete_orders')) {
+      setToast({ message: 'Bạn không có quyền xóa đơn hàng', type: 'error' });
+      return;
+    }
+
     setOrders(prev => prev.filter(o => !ids.includes(o.id)));
     
     const rowIndexesToDelete: number[] = [];
@@ -149,26 +213,47 @@ const App: React.FC = () => {
     setToast({ message: 'Lưu đơn hàng thành công!', type: 'success' });
   };
 
-  const SidebarItem = ({ view, icon: Icon, label }: { view: ViewState, icon: any, label: string }) => (
-    <button
-      onClick={() => {
-        setCurrentView(view);
-        // On mobile, auto-close sidebar when clicking an item
-        if (window.innerWidth < 768) setIsSidebarOpen(false);
-      }}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group
-        ${currentView === view 
-          ? 'bg-red-600 text-white shadow-md' 
-          : 'text-gray-600 hover:bg-red-50 hover:text-red-600'
-        }`}
-    >
-      <Icon size={20} className={currentView === view ? 'text-white' : 'text-gray-500 group-hover:text-red-600'} />
-      <span className={`font-medium ${!isSidebarOpen && 'hidden md:hidden'}`}>{label}</span>
-      {view === 'orders' && orders.some(o => o.status === OrderStatus.PLACED) && (
-        <span className={`ml-auto w-2 h-2 rounded-full bg-red-500 ${!isSidebarOpen && 'hidden md:hidden'}`}></span>
-      )}
-    </button>
-  );
+  const SidebarItem = ({ view, icon: Icon, label, reqPerms }: { view: ViewState, icon: any, label: string, reqPerms: Permission[] }) => {
+    // Show item if user has AT LEAST ONE of the required permissions
+    const hasAccess = currentUser?.role === 'admin' || reqPerms.some(p => currentUser?.permissions.includes(p));
+    
+    if (!hasAccess) return null;
+    
+    return (
+      <button
+        onClick={() => {
+          setCurrentView(view);
+          // On mobile, auto-close sidebar when clicking an item
+          if (window.innerWidth < 768) setIsSidebarOpen(false);
+        }}
+        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group
+          ${currentView === view 
+            ? 'bg-red-600 text-white shadow-md' 
+            : 'text-gray-600 hover:bg-red-50 hover:text-red-600'
+          }`}
+      >
+        <Icon size={20} className={currentView === view ? 'text-white' : 'text-gray-500 group-hover:text-red-600'} />
+        <span className={`font-medium ${!isSidebarOpen && 'hidden md:hidden'}`}>{label}</span>
+        {view === 'orders' && orders.some(o => o.status === OrderStatus.PLACED) && (
+          <span className={`ml-auto w-2 h-2 rounded-full bg-red-500 ${!isSidebarOpen && 'hidden md:hidden'}`}></span>
+        )}
+      </button>
+    );
+  };
+
+  // --- Render ---
+
+  if (isAuthChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-red-600" size={40} />
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
@@ -211,14 +296,18 @@ const App: React.FC = () => {
         </div>
 
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
-          <SidebarItem view="dashboard" icon={LayoutDashboard} label="Tổng Quan" />
-          <SidebarItem view="orders" icon={ShoppingCart} label="Đơn Hàng" />
-          <SidebarItem view="customers" icon={Users} label="Khách Hàng" />
-          <SidebarItem view="settings" icon={Settings} label="Cài Đặt" />
+          <SidebarItem view="dashboard" icon={LayoutDashboard} label="Tổng Quan" reqPerms={['view_dashboard']} />
+          <SidebarItem view="orders" icon={ShoppingCart} label="Đơn Hàng" reqPerms={['view_orders']} />
+          <SidebarItem view="customers" icon={Users} label="Khách Hàng" reqPerms={['view_customers']} />
+          {/* Settings requires either personal OR admin access */}
+          <SidebarItem view="settings" icon={SettingsIcon} label="Cài Đặt" reqPerms={['view_settings_personal', 'view_settings_admin']} />
         </nav>
 
         <div className="p-4 border-t border-gray-100 shrink-0">
-           <button className={`w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-lg transition-colors ${!isSidebarOpen && 'justify-center'}`}>
+           <button 
+             onClick={handleLogout}
+             className={`w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-lg transition-colors ${!isSidebarOpen && 'justify-center'}`}
+           >
              <LogOut size={20} />
              {isSidebarOpen && <span className="font-medium">Đăng xuất</span>}
            </button>
@@ -244,19 +333,21 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <button 
-              onClick={handleAddOrder}
-              className="hidden sm:flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors shadow-sm text-sm font-medium"
-            >
-              <PlusCircle size={18} />
-              Tạo Đơn Mới
-            </button>
+            {hasPermission('add_orders') && (
+              <button 
+                onClick={handleAddOrder}
+                className="hidden sm:flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors shadow-sm text-sm font-medium"
+              >
+                <PlusCircle size={18} />
+                Tạo Đơn Mới
+              </button>
+            )}
             <div className="relative p-2 text-gray-500 hover:bg-gray-100 rounded-full cursor-pointer transition-colors">
               <Bell size={20} />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white"></span>
             </div>
-            <div className="w-8 h-8 rounded-full bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 font-bold text-sm">
-              AD
+            <div className="w-8 h-8 rounded-full bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 font-bold text-sm" title={currentUser.username}>
+              {currentUser.username.substring(0, 2).toUpperCase()}
             </div>
           </div>
         </header>
@@ -272,8 +363,8 @@ const App: React.FC = () => {
             </div>
           ) : (
             <div className="max-w-7xl mx-auto h-full">
-              {currentView === 'dashboard' && <Dashboard orders={orders} />}
-              {currentView === 'orders' && (
+              {currentView === 'dashboard' && hasPermission('view_dashboard') && <Dashboard orders={orders} />}
+              {currentView === 'orders' && hasPermission('view_orders') && (
                 <OrderList 
                   orders={orders} 
                   onEdit={handleEditOrder} 
@@ -283,31 +374,40 @@ const App: React.FC = () => {
                   onBulkDelete={handleBulkDelete}
                 />
               )}
-              {currentView === 'customers' && (
+              {currentView === 'customers' && hasPermission('view_customers') && (
                 <div className="bg-white p-12 rounded-xl shadow-sm text-center border border-gray-200">
                   <Users size={48} className="mx-auto text-gray-300 mb-4" />
                   <h3 className="text-xl font-medium text-gray-600">Quản lý khách hàng</h3>
                   <p className="text-gray-400 mt-2">Tính năng đang được phát triển...</p>
                 </div>
               )}
-              {currentView === 'settings' && (
-                <div className="bg-white p-12 rounded-xl shadow-sm text-center border border-gray-200">
-                  <Settings size={48} className="mx-auto text-gray-300 mb-4" />
-                  <h3 className="text-xl font-medium text-gray-600">Cài đặt hệ thống</h3>
-                  <p className="text-gray-400 mt-2">Tính năng đang được phát triển...</p>
-                </div>
+              {(currentView === 'settings') && 
+               (hasPermission('view_settings_personal') || hasPermission('view_settings_admin')) && (
+                <Settings currentUser={currentUser} onUpdateCurrentUser={setCurrentUser} />
+              )}
+              
+              {/* Fallback Unauthorized */}
+              {((currentView === 'dashboard' && !hasPermission('view_dashboard')) ||
+                (currentView === 'orders' && !hasPermission('view_orders')) ||
+                (currentView === 'customers' && !hasPermission('view_customers')) ||
+                (currentView === 'settings' && !hasPermission('view_settings_personal') && !hasPermission('view_settings_admin'))) && (
+                 <div className="flex items-center justify-center h-full text-gray-500">
+                    Bạn không có quyền truy cập trang này.
+                 </div>
               )}
             </div>
           )}
         </main>
 
         {/* Floating Action Button (Mobile) */}
-        <button 
-          onClick={handleAddOrder}
-          className="md:hidden absolute bottom-6 right-6 w-14 h-14 bg-red-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-red-700 transition-colors z-30"
-        >
-          <PlusCircle size={28} />
-        </button>
+        {hasPermission('add_orders') && (
+          <button 
+            onClick={handleAddOrder}
+            className="md:hidden absolute bottom-6 right-6 w-14 h-14 bg-red-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-red-700 transition-colors z-30"
+          >
+            <PlusCircle size={28} />
+          </button>
+        )}
       </div>
 
       <OrderModal 
