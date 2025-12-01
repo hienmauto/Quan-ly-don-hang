@@ -4,7 +4,7 @@ const SHEET_ID = '1HARjln1eTmMPJo1WX6n0KHX-UtLst0PPB8LgBy4-5CQ';
 const SHEET_GID = '1857148256';
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${SHEET_GID}`;
 
-// URL Script (Đã cấu hình từ các bước trước)
+// URL Script
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzH2tLqGf2hTfC2wS4XyJ1yR7x8j3gK6l5n9oP0q1r2s3t4u5v6/exec'; 
 
 // N8N Webhook URLs
@@ -42,7 +42,7 @@ const mapOrderToSheetRow = (order: Partial<Order>) => {
   return [
     order.id || '',                                     // A: Mã đơn hàng (ID)
     order.trackingCode || '',                           // B: Mã vận chuyển
-    order.carrier || '',                                // C: Đơn vị VC
+    order.carrier || '',                                // C: Đơn vị vận chuyển
     order.createdAt || new Date().toISOString().split('T')[0], // D: Ngày
     order.customerName || '',                           // E: Tên khách
     order.customerPhone || '',                          // F: SĐT khách
@@ -161,14 +161,17 @@ export const sendDeleteOrdersToWebhook = async (orders: Order[]): Promise<boolea
   try {
     const mappedOrders = orders.map(mapOrderToN8NPayload);
 
+    // Using DELETE method as configured in N8N
     await fetch(N8N_DELETE_WEBHOOK_URL, {
-      method: 'POST',
+      method: 'DELETE',
       headers: { 
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
       body: JSON.stringify(mappedOrders),
     });
+    
+    console.log('Delete webhook dispatched successfully via DELETE method');
     return true;
   } catch (error) {
     console.error('Lỗi khi gửi Webhook N8N (Delete):', error);
