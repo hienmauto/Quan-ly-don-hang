@@ -15,8 +15,7 @@ const N8N_DELETE_WEBHOOK_URL = 'https://n8n.hienmauto.com/webhook/quan-ly-don-ha
 
 export const fetchOrdersFromSheet = async (): Promise<Order[]> => {
   try {
-    // Add a cache-busting parameter to the URL
-    const response = await fetch(`${CSV_URL}&t=${new Date().getTime()}`);
+    const response = await fetch(CSV_URL);
     if (!response.ok) throw new Error('Failed to fetch sheet');
     const text = await response.text();
     const orders = parseCSV(text);
@@ -250,10 +249,6 @@ export const deleteBatchOrdersFromSheet = async (rowIndexes: number[]): Promise<
   }
 };
 
-const isValidStatus = (status: string): status is OrderStatus => {
-    return Object.values(OrderStatus).includes(status as OrderStatus);
-}
-
 const parseCSV = (text: string): Order[] => {
   const rows = text.split('\n');
   if (rows.length < 2) return []; // Dòng 1 là tiêu đề
@@ -262,78 +257,60 @@ const parseCSV = (text: string): Order[] => {
 
   // Bắt đầu từ i=1 (Dòng 2 trong Excel)
   for (let i = 1; i < rows.length; i++) {
-    try {
-        const rowStr = rows[i].trim();
-        if (!rowStr) continue;
-        
-        const row = parseRow(rowStr);
+    const rowStr = rows[i].trim();
+    if (!rowStr) continue;
+    
+    const row = parseRow(rowStr);
+    
+    // MAPPING CHÍNH XÁC: Cột A là ID
+    const idRaw = row[0];        // A
+    const trackingCode = row[1]; // B
+    const carrier = row[2];      // C
+    const dateRaw = row[3];      // D
+    const customerName = row[4]; // E
+    const customerPhone = row[5];// F
+    const address = row[6];      // G
+    const productName = row[7];  // H
+    const platformRaw = row[8];  // I
+    const priceRaw = row[9];     // J
+    const statusRawText = row[10];// K
+    const deliveryDeadline = row[11];// L
+    const note = row[12];        // M
+    const templateStatus = row[13];// N
 
-        // --- VALIDATION ---
-        // A basic check to see if it's a potentially valid row.
-        // Check if customer name (column E) or phone (column F) exists.
-        if (!row[4] && !row[5]) {
-            console.warn(`Skipping malformed row ${i + 1}: Customer name and phone are empty.`);
-            continue;
-        }
-        
-        // MAPPING CHÍNH XÁC: Cột A là ID
-        const idRaw = row[0];        // A
-        const trackingCode = row[1]; // B
-        const carrier = row[2];      // C
-        const dateRaw = row[3];      // D
-        const customerName = row[4]; // E
-        const customerPhone = row[5];// F
-        const address = row[6];      // G
-        const productName = row[7];  // H
-        const platformRaw = row[8];  // I
-        const priceRaw = row[9];     // J
-        const statusRawText = row[10];// K
-        const deliveryDeadline = row[11];// L
-        const note = row[12];        // M
-        const templateStatus = row[13];// N
+    // Không ép kiểu enum, lấy nguyên văn
+    const status = (statusRawText || '').trim() || 'Đã in bill';
+    const price = parseCurrency(priceRaw);
+    
+    const items: OrderItem[] = [{
+      productId: 'SHEET_ITEM',
+      productName: productName || 'Sản phẩm',
+      quantity: 1,
+      price: price
+    }];
 
-        let status = (statusRawText || '').trim() || 'Đã in bill';
-        // If the status from the sheet is not a valid OrderStatus enum, default it.
-        if (!isValidStatus(status)) {
-            console.warn(`Invalid status "${status}" in row ${i + 1}. Defaulting to 'Đã in bill'.`);
-            status = OrderStatus.PRINTED;
-        }
+    // Sheet Row Index = i + 1 (Do header là dòng 1, mảng bắt đầu từ 0)
+    const sheetRowIndex = i + 1;
 
-        const price = parseCurrency(priceRaw);
-        
-        const items: OrderItem[] = [{
-        productId: 'SHEET_ITEM',
-        productName: productName || 'Sản phẩm',
-        quantity: 1,
-        price: price
-        }];
-
-        // Sheet Row Index = i + 1 (Do header là dòng 1, mảng bắt đầu từ 0)
-        const sheetRowIndex = i + 1;
-
-        orders.push({
-        // Use _gen_ prefix for internal identification of empty rows
-        id: idRaw || `_gen_${sheetRowIndex}`, 
-        rowIndex: sheetRowIndex,             // Lưu số dòng để xóa/sửa
-        trackingCode: trackingCode || '',
-        carrier: carrier || '',
-        customerName: customerName || 'Khách lẻ',
-        customerPhone: customerPhone || '',
-        address: address || '',
-        status: status,
-        items: items,
-        totalAmount: price,
-        createdAt: dateRaw ? formatDate(dateRaw) : getLocalTodayStr(),
-        paymentMethod: 'COD',
-        platform: mapPlatform(platformRaw),
-        note: note || '',
-        deliveryDeadline: deliveryDeadline || 'Trước 23h59p',
-        templateStatus: templateStatus || 'Có mẫu'
-        });
-    } catch (e) {
-        console.error(`Error parsing row ${i+1}:`, e);
-        // Continue to next row if this one fails
-    }
+    orders.push({
+      // Use _gen_ prefix for internal identification of empty rows
+      id: idRaw || `_gen_${sheetRowIndex}`, 
+      rowIndex: sheetRowIndex,             // Lưu số dòng để xóa/sửa
+      trackingCode: trackingCode || '',
+      carrier: carrier || '',
+      customerName: customerName || 'Khách lẻ',
+      customerPhone: customerPhone || '',
+      address: address || '',
+      status: status as OrderStatus,
+      items: items,
+      totalAmount: price,
+      createdAt: dateRaw ? formatDate(dateRaw) : getLocalTodayStr(),
+      paymentMethod: 'COD',
+      platform: mapPlatform(platformRaw),
+      note: note || '',
+      deliveryDeadline: deliveryDeadline || 'Trước 23h59p',
+      templateStatus: templateStatus || 'Có mẫu'
+    });
   }
 
   return orders;
