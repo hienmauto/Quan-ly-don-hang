@@ -102,6 +102,8 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
   // --- Profile Handlers ---
   const handleProfileUpdate = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Chỉ xử lý cập nhật mật khẩu vì thông tin cá nhân giờ là read-only
     if (profileForm.newPassword) {
         if (profileForm.newPassword !== profileForm.confirmPassword) {
             showNotify('Mật khẩu mới không khớp!', 'error');
@@ -112,25 +114,22 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
             showNotify(complexity.message || 'Mật khẩu yếu', 'error');
             return;
         }
-    }
 
-    const updates: Partial<User> = {
-      fullName: profileForm.fullName,
-      email: profileForm.email,
-      phone: profileForm.phone
-    };
-    
-    if (profileForm.newPassword) {
-      updates.password = profileForm.newPassword;
-    }
+        const updates: Partial<User> = {
+          password: profileForm.newPassword
+        };
 
-    const result = updateUser(currentUser.username, updates);
-    if (result.success) {
-      showNotify('Cập nhật thông tin thành công!', 'success');
-      onUpdateCurrentUser({ ...currentUser, ...updates });
-      setProfileForm(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
+        const result = updateUser(currentUser.username, updates);
+        if (result.success) {
+          showNotify('Đổi mật khẩu thành công!', 'success');
+          onUpdateCurrentUser({ ...currentUser, ...updates });
+          setProfileForm(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
+        } else {
+          showNotify(result.message, 'error');
+        }
     } else {
-      showNotify(result.message, 'error');
+      // Nếu không nhập mật khẩu mới thì không làm gì cả (vì info đã read-only)
+      showNotify('Thông tin cá nhân không được phép chỉnh sửa.', 'error');
     }
   };
 
@@ -367,9 +366,8 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
                 <label className="block text-sm font-medium text-gray-700 mb-1">Họ và tên</label>
                 <input 
                   value={profileForm.fullName} 
-                  onChange={e => setProfileForm({...profileForm, fullName: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none" 
-                  required
+                  disabled
+                  className="w-full px-4 py-2 border bg-gray-100 border-gray-300 rounded-lg text-gray-500 cursor-not-allowed outline-none" 
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -378,16 +376,16 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
                   <input 
                     type="email"
                     value={profileForm.email} 
-                    onChange={e => setProfileForm({...profileForm, email: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none" 
+                    disabled
+                    className="w-full px-4 py-2 border bg-gray-100 border-gray-300 rounded-lg text-gray-500 cursor-not-allowed outline-none" 
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Số điện thoại</label>
                   <input 
                     value={profileForm.phone} 
-                    onChange={e => setProfileForm({...profileForm, phone: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none" 
+                    disabled
+                    className="w-full px-4 py-2 border bg-gray-100 border-gray-300 rounded-lg text-gray-500 cursor-not-allowed outline-none" 
                   />
                 </div>
               </div>
