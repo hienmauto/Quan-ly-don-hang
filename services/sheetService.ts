@@ -29,6 +29,14 @@ export const fetchOrdersFromSheet = async (): Promise<Order[]> => {
   }
 };
 
+const getLocalTodayStr = () => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const mapOrderToSheetRow = (order: Partial<Order>) => {
   const productString = order.items && order.items.length > 0 
     ? order.items[0].productName 
@@ -49,7 +57,7 @@ const mapOrderToSheetRow = (order: Partial<Order>) => {
     idToSave,                                           // A: Mã đơn hàng (ID)
     order.trackingCode || '',                           // B: Mã vận chuyển
     order.carrier || '',                                // C: Đơn vị vận chuyển
-    order.createdAt || new Date().toISOString().split('T')[0], // D: Ngày
+    order.createdAt || getLocalTodayStr(),              // D: Ngày
     order.customerName || '',                           // E: Tên khách
     order.customerPhone || '',                          // F: SĐT khách
     order.address || '',                                // G: Địa chỉ
@@ -84,7 +92,7 @@ const mapOrderToN8NPayload = (order: Partial<Order>) => {
     "Nền tảng": (order.platform || "shopee").toLowerCase(),
     "Mẫu": order.templateStatus || "Có mẫu",
     "Mã đơn hàng": idToSend,
-    "Ngày": order.createdAt || new Date().toISOString().split('T')[0],
+    "Ngày": order.createdAt || getLocalTodayStr(),
     "Note": order.note || "",
     "Địa chỉ": order.address || "",
     "Trạng thái": order.status || "Đã in đơn",
@@ -295,7 +303,7 @@ const parseCSV = (text: string): Order[] => {
       status: status as OrderStatus,
       items: items,
       totalAmount: price,
-      createdAt: dateRaw ? formatDate(dateRaw) : new Date().toISOString().split('T')[0],
+      createdAt: dateRaw ? formatDate(dateRaw) : getLocalTodayStr(),
       paymentMethod: 'COD',
       platform: mapPlatform(platformRaw),
       note: note || '',

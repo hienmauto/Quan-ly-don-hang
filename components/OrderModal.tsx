@@ -52,6 +52,15 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
     formData.items && formData.items.length > 0 && formData.items[0].productName?.trim()
   );
 
+  // Helper to get local date string YYYY-MM-DD
+  const getTodayStr = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -72,7 +81,7 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
           carrier: '',
           trackingCode: '',
           totalAmount: 0,
-          createdAt: new Date().toISOString().split('T')[0],
+          createdAt: getTodayStr(), // Use local date
           templateStatus: 'Có mẫu',
           deliveryDeadline: 'Trước 23h59p'
         });
@@ -215,7 +224,7 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
               status: OrderStatus.PRINTED, // Default: Đã in bill
               paymentMethod: 'COD',
               items: o.items && o.items.length > 0 ? o.items : [],
-              createdAt: o.createdAt || new Date().toISOString().split('T')[0],
+              createdAt: o.createdAt || getTodayStr(), // Use local date
               note: o.note || 'Đơn thường',
               templateStatus: o.templateStatus || 'Có mẫu',
               deliveryDeadline: o.deliveryDeadline || 'Trước 23h59p',
