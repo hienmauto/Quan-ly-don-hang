@@ -78,6 +78,31 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
     return 'text-gray-700 bg-gray-50 border-gray-100';
   };
 
+  // Helper for Platform Style
+  const getPlatformStyle = (platform?: string) => {
+    const p = (platform || '').toLowerCase();
+    if (p.includes('shopee')) return 'bg-[#ee4d2d] text-white'; // Orange
+    if (p.includes('tiktok')) return 'bg-black text-white'; // Black
+    if (p.includes('lazada')) return 'bg-white text-[#0f146d] border border-[#0f146d]'; // White bg, Blue text
+    if (p.includes('zalo')) return 'bg-blue-100 text-gray-900'; // Light Blue
+    if (p.includes('facebook') || p.includes('fb')) return 'bg-[#1877f2] text-white'; // Dark Blue
+    return 'bg-gray-100 text-gray-800';
+  };
+
+  // Helper for Note Style
+  const getNoteStyle = (note?: string) => {
+    const n = (note || '').toLowerCase();
+    if (n.includes('hỏa tốc')) return 'bg-red-600 text-white'; // Red bg, White text
+    return 'bg-green-200 text-gray-900'; // Normal: Green bg, Black text
+  };
+
+  // Helper for Delivery Time Style
+  const getDeliveryStyle = (time?: string) => {
+    const t = (time || '').toLowerCase();
+    if (t.includes('11h59')) return 'bg-red-600 text-white'; // Red bg, White text
+    return 'bg-green-200 text-gray-900'; // Before 23h59: Green bg, Black text
+  };
+
   // Format Date Helper
   const formatDateDisplay = (dateStr: string) => {
     try {
@@ -205,8 +230,8 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
         <table className="w-full text-left border-collapse whitespace-nowrap min-w-[2000px]">
           <thead className="bg-white sticky top-0 z-30 shadow-sm">
             <tr className="text-gray-700 text-sm font-bold border-b border-gray-200">
-              {/* Pinned Header Checkbox */}
-              <th className="p-4 w-[50px] text-center sticky left-0 bg-white z-40 border-r border-gray-100">
+              {/* Pinned Header Checkbox (z-50 to sit above Col 2) */}
+              <th className="p-4 w-[50px] min-w-[50px] max-w-[50px] text-center sticky left-0 bg-white z-50 border-r border-gray-100">
                 <input 
                   type="checkbox" 
                   className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
@@ -215,8 +240,8 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
                 />
               </th>
               
-              {/* Pinned Header Order ID */}
-              <th className="p-4 border-r border-gray-100 sticky left-[50px] bg-white z-40 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Mã đơn hàng</th>
+              {/* Pinned Header Order ID (left-[49px] to overlap 1px and hide gap) */}
+              <th className="p-4 border-r border-gray-100 sticky left-[49px] bg-white z-40 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Mã đơn hàng</th>
               
               <th className="p-4 border-r border-gray-100">Đơn vị vận chuyển</th>
               <th className="p-4 border-r border-gray-100 max-w-xs">Sản phẩm</th>
@@ -249,7 +274,8 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
                     onClick={() => handleSelectRow(order.id)}
                     className={`hover:bg-blue-50 transition-colors group cursor-pointer ${rowBg}`}
                   >
-                    <td className={`p-4 text-center sticky left-0 group-hover:bg-blue-50 z-20 border-r border-gray-100 ${rowBg}`}>
+                    {/* Pinned Body Checkbox (z-30 to sit above Col 2) */}
+                    <td className={`p-4 w-[50px] min-w-[50px] max-w-[50px] text-center sticky left-0 group-hover:bg-blue-50 z-30 border-r border-gray-100 ${rowBg}`}>
                       <input 
                         type="checkbox" 
                         className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer pointer-events-none" 
@@ -258,8 +284,8 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
                       />
                     </td>
                     
-                    {/* Mã đơn hàng (Cột A) - Pinned */}
-                    <td className={`p-4 border-r border-gray-100 font-medium text-blue-600 sticky left-[50px] group-hover:bg-blue-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] ${rowBg}`}>
+                    {/* Mã đơn hàng (Cột A) - Pinned (left-[49px] to overlap) */}
+                    <td className={`p-4 border-r border-gray-100 font-medium text-blue-600 sticky left-[49px] group-hover:bg-blue-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] ${rowBg}`}>
                       {order.id.startsWith('_gen_') ? '' : order.id}
                     </td>
 
@@ -278,12 +304,16 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
                       </span>
                     </td>
 
-                    <td className="p-4 border-r border-gray-100 uppercase text-xs font-bold text-gray-500">
-                      {order.platform || 'SHOPEE'}
+                    <td className="p-4 border-r border-gray-100">
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase shadow-sm ${getPlatformStyle(order.platform)}`}>
+                         {order.platform || 'SHOPEE'}
+                      </span>
                     </td>
 
-                    <td className="p-4 border-r border-gray-100 text-gray-600">
-                      {order.note || ''}
+                    <td className="p-4 border-r border-gray-100">
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold shadow-sm ${getNoteStyle(order.note)}`}>
+                        {order.note || 'Đơn thường'}
+                      </span>
                     </td>
 
                     <td className="p-4 border-r border-gray-100 text-gray-600 font-mono text-xs">
@@ -310,8 +340,8 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
                       {formatDateDisplay(order.createdAt)}
                     </td>
 
-                    <td className="p-4 border-r border-gray-100 text-gray-600">
-                      <span className="text-gray-900 font-medium">
+                    <td className="p-4 border-r border-gray-100">
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold shadow-sm ${getDeliveryStyle(order.deliveryDeadline)}`}>
                         {order.deliveryDeadline || 'Trước 23h59p'}
                       </span>
                     </td>
@@ -539,7 +569,7 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
                       {viewingOrder.status}
                    </span>
                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold uppercase text-white bg-gray-500 px-2 py-0.5 rounded">
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase shadow-sm ${getPlatformStyle(viewingOrder.platform)}`}>
                           {viewingOrder.platform}
                       </span>
                    </div>
@@ -568,8 +598,8 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
                     <div className="space-y-2 text-sm">
                        <p className="flex justify-between"><span className="text-gray-500">Đơn vị VC:</span> <span className="text-gray-900 font-bold text-right">{viewingOrder.carrier || '---'}</span></p>
                        <p className="flex justify-between"><span className="text-gray-500">Mã vận đơn:</span> <span className="font-mono font-medium text-purple-700 text-right">{viewingOrder.trackingCode || '---'}</span></p>
-                       <p className="flex justify-between"><span className="text-gray-500">Hạn giao:</span> <span className="text-gray-900 font-bold text-right">{viewingOrder.deliveryDeadline}</span></p>
-                       <p className="flex justify-between"><span className="text-gray-500">Loại đơn:</span> <span className="font-medium text-orange-600 text-right">{viewingOrder.note}</span></p>
+                       <p className="flex justify-between"><span className="text-gray-500">Hạn giao:</span> <span className={`font-bold text-right px-2 py-0.5 rounded text-xs ${getDeliveryStyle(viewingOrder.deliveryDeadline)}`}>{viewingOrder.deliveryDeadline}</span></p>
+                       <p className="flex justify-between"><span className="text-gray-500">Loại đơn:</span> <span className={`font-medium text-right px-2 py-0.5 rounded text-xs ${getNoteStyle(viewingOrder.note)}`}>{viewingOrder.note}</span></p>
                        <p className="flex justify-between border-t border-purple-200 pt-2 mt-2"><span className="text-gray-500">Trạng thái mẫu:</span> <span className="font-medium text-right text-gray-800">{viewingOrder.templateStatus}</span></p>
                     </div>
                  </div>
