@@ -65,8 +65,13 @@ const App: React.FC = () => {
     if (currentUser) {
       const loadData = async () => {
         setIsLoading(true);
-        const sheetOrders = await fetchOrdersFromSheet();
-        setOrders(sheetOrders);
+        try {
+          const sheetOrders = await fetchOrdersFromSheet();
+          setOrders(sheetOrders);
+        } catch (error) {
+          console.error("Error fetching and setting orders:", error);
+          setToast({ message: 'Failed to load order data.', type: 'error' });
+        }
         setIsLoading(false);
       };
       loadData();
