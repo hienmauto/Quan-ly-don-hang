@@ -255,7 +255,7 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
                     
                     {/* Mã đơn hàng (Cột A) - Pinned */}
                     <td className={`p-4 border-r border-gray-100 font-medium text-blue-600 sticky left-[50px] group-hover:bg-blue-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] ${rowBg}`}>
-                      {order.id}
+                      {order.id.startsWith('_gen_') ? '' : order.id}
                     </td>
 
                     <td className="p-4 border-r border-gray-100 text-gray-600">
@@ -446,7 +446,7 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
                 <div className="space-y-2">
                   {selectedOrdersData.map((order) => (
                     <div key={order.id} className="text-sm border-b border-gray-100 last:border-0 pb-1 last:pb-0">
-                      <span className="font-bold text-gray-800">{order.id}</span>
+                      <span className="font-bold text-gray-800">{order.id.startsWith('_gen_') ? '(Chưa có mã)' : order.id}</span>
                       <span className="text-gray-500 mx-2">-</span>
                       <span className="text-gray-600 truncate inline-block align-bottom max-w-[200px]" title={order.items[0]?.productName}>
                         {order.items[0]?.productName || 'N/A'}
@@ -524,7 +524,7 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
               <div className="flex flex-wrap gap-4 justify-between items-start mb-6">
                 <div>
                    <span className="text-sm text-gray-500 font-medium">Mã đơn hàng</span>
-                   <p className="text-2xl font-bold text-gray-800 tracking-tight">{viewingOrder.id}</p>
+                   <p className="text-2xl font-bold text-gray-800 tracking-tight">{viewingOrder.id.startsWith('_gen_') ? '---' : viewingOrder.id}</p>
                    <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
                       <Calendar size={14} /> Ngày tạo: <span className="font-medium text-gray-700">{formatDateDisplay(viewingOrder.createdAt)}</span>
                    </p>

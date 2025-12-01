@@ -39,8 +39,14 @@ const mapOrderToSheetRow = (order: Partial<Order>) => {
   const noteValue = order.note || 'Đơn thường';
   const templateValue = order.templateStatus || 'Có mẫu';
   
+  // If ID is internal generated (_gen_), save as empty string
+  let idToSave = order.id || '';
+  if (idToSave.startsWith('_gen_')) {
+    idToSave = '';
+  }
+  
   return [
-    order.id || '',                                     // A: Mã đơn hàng (ID)
+    idToSave,                                           // A: Mã đơn hàng (ID)
     order.trackingCode || '',                           // B: Mã vận chuyển
     order.carrier || '',                                // C: Đơn vị vận chuyển
     order.createdAt || new Date().toISOString().split('T')[0], // D: Ngày
@@ -63,6 +69,12 @@ const mapOrderToN8NPayload = (order: Partial<Order>) => {
     ? order.items[0].productName 
     : '';
     
+  // If ID is internal generated (_gen_), send as empty string
+  let idToSend = order.id || '';
+  if (idToSend.startsWith('_gen_')) {
+    idToSend = '';
+  }
+
   return {
     "Thời gian giao hàng": order.deliveryDeadline || "Trước 23h59p",
     "Sản phẩm": productString,
@@ -71,7 +83,7 @@ const mapOrderToN8NPayload = (order: Partial<Order>) => {
     "Mã vận chuyển": order.trackingCode || null,
     "Nền tảng": (order.platform || "shopee").toLowerCase(),
     "Mẫu": order.templateStatus || "Có mẫu",
-    "Mã đơn hàng": order.id || "",
+    "Mã đơn hàng": idToSend,
     "Ngày": order.createdAt || new Date().toISOString().split('T')[0],
     "Note": order.note || "",
     "Địa chỉ": order.address || "",
@@ -272,7 +284,8 @@ const parseCSV = (text: string): Order[] => {
     const sheetRowIndex = i + 1;
 
     orders.push({
-      id: idRaw || `ROW-${sheetRowIndex}`, // Hiển thị Cột A
+      // Use _gen_ prefix for internal identification of empty rows
+      id: idRaw || `_gen_${sheetRowIndex}`, 
       rowIndex: sheetRowIndex,             // Lưu số dòng để xóa/sửa
       trackingCode: trackingCode || '',
       carrier: carrier || '',
