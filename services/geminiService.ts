@@ -79,10 +79,9 @@ export const extractOrderFromImage = async (base64Data: string, mimeType: string
             - address: Địa chỉ giao hàng.
             - platform: Phân tích logo hoặc thông tin trên phiếu gửi hàng để xác định nền tảng. CHỈ TRẢ VỀ MỘT TRONG CÁC GIÁ TRỊ SAU: "Shopee", "Lazada", "TikTok", "Zalo", "Facebook". Nếu không rõ, mặc định là "Shopee".
             - totalAmount: Tổng tiền thu (số nguyên).
-            - createdAt: Ngày giờ đặt hàng theo định dạng "HH:mm dd-MM" (ví dụ: 10:22 01-12). Nếu không tìm thấy thông tin ngày giờ, hãy trả về null để hệ thống tự lấy giờ hiện tại.
+            - createdAt: Ngày giờ đặt hàng theo định dạng "HH:mm dd-MM" (ví dụ: 10:22 01-12). Nếu không tìm thấy thông tin ngày giờ, hãy trả về một chuỗi trống.
             - deliveryDeadline: Hạn giao hàng. Mặc định trả về "Trước 23h59p".
             - note: Phân tích bill, nếu thấy chữ "Hỏa tốc", "Express", "Gấp" thì trả về "Đơn hỏa tốc", ngược lại mặc định trả về "Đơn thường".
-            - templateStatus: Mặc định trả về "Có mẫu".
             - items: Mảng sản phẩm. { productName: "tên món", quantity: 1, price: 0 }.
             
             QUY TẮC ĐẶT TÊN SẢN PHẨM (productName) - CỰC KỲ QUAN TRỌNG:
