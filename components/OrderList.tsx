@@ -78,10 +78,15 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
     return 'text-gray-700 bg-gray-50 border-gray-100';
   };
 
-  // Format Date Helper: YYYY-MM-DD -> DD/MM/YYYY
+  // Format Date Helper
   const formatDateDisplay = (dateStr: string) => {
     try {
       if (!dateStr) return '';
+      // If matches simplified format "hh:mm dd-mm"
+      if (dateStr.includes(':') && dateStr.includes('-') && dateStr.length <= 11) {
+          return dateStr;
+      }
+      
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) return dateStr;
       

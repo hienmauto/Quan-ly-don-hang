@@ -52,13 +52,14 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
     formData.items && formData.items.length > 0 && formData.items[0].productName?.trim()
   );
 
-  // Helper to get local date string YYYY-MM-DD
+  // Helper to get local date string hh:mm dd-mm
   const getTodayStr = () => {
     const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    const hh = String(today.getHours()).padStart(2, '0');
+    const mm = String(today.getMinutes()).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const MM = String(today.getMonth() + 1).padStart(2, '0');
+    return `${hh}:${mm} ${dd}-${MM}`;
   };
 
   // Reset form when modal opens
@@ -81,7 +82,7 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
           carrier: '',
           trackingCode: '',
           totalAmount: 0,
-          createdAt: getTodayStr(), // Use local date
+          createdAt: getTodayStr(), // Use new format
           templateStatus: 'Có mẫu',
           deliveryDeadline: 'Trước 23h59p'
         });
@@ -224,7 +225,7 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
               status: OrderStatus.PRINTED, // Default: Đã in bill
               paymentMethod: 'COD',
               items: o.items && o.items.length > 0 ? o.items : [],
-              createdAt: o.createdAt || getTodayStr(), // Use local date
+              createdAt: o.createdAt || getTodayStr(), // Use new format
               note: o.note || 'Đơn thường',
               templateStatus: o.templateStatus || 'Có mẫu',
               deliveryDeadline: o.deliveryDeadline || 'Trước 23h59p',
@@ -406,7 +407,7 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
                               <input type="number" value={order.totalAmount || 0} onChange={e => updateImportedOrder(idx, 'totalAmount', Number(e.target.value))} className="w-full px-3 py-2.5 bg-transparent outline-none focus:bg-white focus:ring-1 focus:ring-inset focus:ring-red-500" />
                             </td>
                             <td className="p-0 border-r border-gray-100">
-                              <input type="date" value={order.createdAt || ''} onChange={e => updateImportedOrder(idx, 'createdAt', e.target.value)} className="w-full px-3 py-2.5 bg-transparent outline-none focus:bg-white focus:ring-1 focus:ring-inset focus:ring-red-500" />
+                              <input type="text" value={order.createdAt || ''} onChange={e => updateImportedOrder(idx, 'createdAt', e.target.value)} className="w-full px-3 py-2.5 bg-transparent outline-none focus:bg-white focus:ring-1 focus:ring-inset focus:ring-red-500" />
                             </td>
                             
                             {/* Nền tảng Select */}
@@ -537,15 +538,27 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
                       />
                    </div>
 
-                   <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1">Tên khách <span className="text-red-500">*</span></label>
-                      <input 
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
-                        placeholder="Nhập tên khách"
-                        value={formData.customerName}
-                        onChange={e => setFormData({...formData, customerName: e.target.value})}
-                        required
-                      />
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-600 mb-1">Tên khách <span className="text-red-500">*</span></label>
+                        <input 
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                          placeholder="Nhập tên khách"
+                          value={formData.customerName}
+                          onChange={e => setFormData({...formData, customerName: e.target.value})}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-600 mb-1">Ngày (hh:mm dd-mm)</label>
+                        <input 
+                          type="text"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                          placeholder="Ví dụ: 10:22 01-12"
+                          value={formData.createdAt}
+                          onChange={e => setFormData({...formData, createdAt: e.target.value})}
+                        />
+                      </div>
                    </div>
 
                    <div>

@@ -17,17 +17,16 @@ const Dashboard: React.FC<DashboardProps> = ({ orders }) => {
   const [aiInsight, setAiInsight] = useState<string>('');
   const [isLoadingAi, setIsLoadingAi] = useState(false);
 
-  // Get today's date string (YYYY-MM-DD) in local time to match stored format
+  // Get today's date parts (dd-mm)
   const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
   const day = String(today.getDate()).padStart(2, '0');
-  const todayStr = `${year}-${month}-${day}`;
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const todayPart = `${day}-${month}`; // Format: dd-mm
 
   // Calculate Stats
-  // Filter orders to only include those created today for the revenue calculation
+  // Filter orders where the createdAt string includes "dd-mm"
   const totalRevenue = orders
-    .filter(order => order.createdAt === todayStr)
+    .filter(order => order.createdAt && order.createdAt.includes(todayPart))
     .reduce((sum, order) => sum + order.totalAmount, 0);
 
   const totalOrders = orders.length;

@@ -31,10 +31,11 @@ export const fetchOrdersFromSheet = async (): Promise<Order[]> => {
 
 const getLocalTodayStr = () => {
   const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  const hh = String(today.getHours()).padStart(2, '0');
+  const mm = String(today.getMinutes()).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const MM = String(today.getMonth() + 1).padStart(2, '0');
+  return `${hh}:${mm} ${dd}-${MM}`;
 };
 
 const mapOrderToSheetRow = (order: Partial<Order>) => {
