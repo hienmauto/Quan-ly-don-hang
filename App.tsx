@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, ShoppingCart, Users, Settings as SettingsIcon, 
   Menu, Bell, PlusCircle, LogOut, Loader2, X 
@@ -51,6 +51,10 @@ const App: React.FC = () => {
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  // --- Profile Dropdown State ---
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+
   // Check Auth on Mount
   useEffect(() => {
     const user = getCurrentUser();
@@ -58,6 +62,17 @@ const App: React.FC = () => {
       setCurrentUser(user);
     }
     setIsAuthChecking(false);
+  }, []);
+
+  // Click outside handler for profile menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Fetch data from Google Sheet on mount (only if authenticated)
@@ -346,8 +361,41 @@ const App: React.FC = () => {
               <Bell size={20} />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white"></span>
             </div>
-            <div className="w-8 h-8 rounded-full bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 font-bold text-sm" title={currentUser.username}>
-              {currentUser.username.substring(0, 2).toUpperCase()}
+            
+            {/* User Dropdown */}
+            <div className="relative" ref={profileMenuRef}>
+              <button 
+                onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                className="w-8 h-8 rounded-full bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 font-bold text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 cursor-pointer hover:bg-indigo-200 transition-colors"
+                title={currentUser.username}
+              >
+                {currentUser.username.substring(0, 2).toUpperCase()}
+              </button>
+
+              {isProfileMenuOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 border border-gray-100 z-50 animate-fade-in origin-top-right">
+                  {(hasPermission('view_settings_personal') || hasPermission('view_settings_admin') || hasPermission('view_settings_roles')) && (
+                     <button
+                        onClick={() => {
+                           setCurrentView('settings');
+                           setIsProfileMenuOpen(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                     >
+                        Cài đặt
+                     </button>
+                  )}
+                  <button
+                     onClick={() => {
+                        handleLogout();
+                        setIsProfileMenuOpen(false);
+                     }}
+                     className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium"
+                  >
+                     Đăng xuất
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </header>
@@ -382,7 +430,7 @@ const App: React.FC = () => {
                 </div>
               )}
               {(currentView === 'settings') && 
-               (hasPermission('view_settings_personal') || hasPermission('view_settings_admin')) && (
+               (hasPermission('view_settings_personal') || hasPermission('view_settings_admin') || hasPermission('view_settings_roles')) && (
                 <Settings currentUser={currentUser} onUpdateCurrentUser={setCurrentUser} />
               )}
               
@@ -390,7 +438,7 @@ const App: React.FC = () => {
               {((currentView === 'dashboard' && !hasPermission('view_dashboard')) ||
                 (currentView === 'orders' && !hasPermission('view_orders')) ||
                 (currentView === 'customers' && !hasPermission('view_customers')) ||
-                (currentView === 'settings' && !hasPermission('view_settings_personal') && !hasPermission('view_settings_admin'))) && (
+                (currentView === 'settings' && !hasPermission('view_settings_personal') && !hasPermission('view_settings_admin') && !hasPermission('view_settings_roles'))) && (
                  <div className="flex items-center justify-center h-full text-gray-500">
                     Bạn không có quyền truy cập trang này.
                  </div>
