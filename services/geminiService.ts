@@ -90,13 +90,13 @@ export const extractOrderFromImage = async (base64Data: string, mimeType: string
             Sau đó format lại tên sản phẩm theo đúng thứ tự ưu tiên các trường hợp sau:
             
             1. Nếu tên gốc chứa "f012" (không phân biệt hoa thường):
-               => Format: "Flamingo F012 (SL: [Số lượng])"
+               => Format: "Flamingo F012 + (SL: [Số lượng])"
             
             2. Nếu tên gốc chứa "f002" (không phân biệt hoa thường):
-               => Format: "Flamingo F002 (SL: [Số lượng])"
+               => Format: "Flamingo F002 + (SL: [Số lượng])"
             
             3. Nếu tên gốc chứa "f011" (không phân biệt hoa thường):
-               => Format: "Flamingo F011 [Mùi hương] (SL: [Số lượng])"
+               => Format: "Flamingo F011 + [Mùi hương] + (SL: [Số lượng])"
                (Hãy trích xuất mùi hương như hương dâu, hương táo, hương đào, v.v...)
 
             4. Nếu tên gốc chứa chữ "PVC" (hoặc PVC nguyên sinh):

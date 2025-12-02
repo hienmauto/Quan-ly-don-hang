@@ -215,66 +215,69 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-fade-in flex flex-col h-full relative">
-      {/* Header / Filters */}
-      <div className="p-4 border-b border-gray-200 bg-gray-50 flex flex-col md:flex-row gap-4 justify-between items-center shrink-0">
+      {/* Header / Filters - Compact on mobile */}
+      <div className="p-2 md:p-4 border-b border-gray-200 bg-gray-50 flex flex-col sm:flex-row gap-2 justify-between items-center shrink-0">
         <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
           <FileText size={20} className="text-blue-600" /> 
-          Danh Sách Đơn Hàng
+          <span className="hidden sm:inline">Danh Sách Đơn Hàng</span>
+          <span className="sm:hidden">Đơn Hàng</span>
           <span className="text-sm font-normal text-gray-500 bg-white px-2 py-0.5 rounded-full border">
             {filteredOrders.length}
           </span>
         </h2>
         
-        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-center">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto items-center">
           
           {/* Bulk Action Buttons */}
           {selectedOrderIds.length > 0 && (
-            <div className="flex gap-2 mr-2 animate-fade-in">
+            <div className="flex gap-2 mr-0 sm:mr-2 animate-fade-in w-full sm:w-auto justify-center">
               <button 
                 onClick={() => setShowBulkUpdateModal(true)}
-                className="flex items-center gap-1 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
+                className="flex items-center justify-center gap-1 px-3 py-1.5 md:py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium flex-1 sm:flex-initial"
               >
                 <CheckSquare size={16} />
-                Cập nhật ({selectedOrderIds.length})
+                <span className="sm:inline hidden">Cập nhật</span> ({selectedOrderIds.length})
               </button>
               <button 
                 onClick={handleBulkCancelClick}
-                className="flex items-center gap-1 px-3 py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors text-sm font-medium"
+                className="flex items-center justify-center gap-1 px-3 py-1.5 md:py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors text-sm font-medium flex-1 sm:flex-initial"
               >
                 <XCircle size={16} />
-                Hủy đơn
+                <span className="sm:inline hidden">Hủy đơn</span>
               </button>
             </div>
           )}
 
-          <button 
-            onClick={onRefresh}
-            className="p-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors bg-white shadow-sm"
-            title="Làm mới dữ liệu"
-          >
-            <RefreshCcw size={20} />
-          </button>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <button 
+              onClick={onRefresh}
+              className="p-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors bg-white shadow-sm shrink-0"
+              title="Làm mới dữ liệu"
+            >
+              <RefreshCcw size={20} />
+            </button>
 
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Tìm tên, SĐT, mã đơn..." 
-              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm w-full sm:w-64 focus:ring-2 focus:ring-blue-500 outline-none"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            <div className="relative flex-1 sm:flex-initial sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input 
+                type="text" 
+                placeholder="Tìm..." 
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm w-full focus:ring-2 focus:ring-blue-500 outline-none"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Table Container with horizontal scroll */}
-      <div className="overflow-x-auto custom-scrollbar flex-1 relative">
+      {/* Table Container with auto scroll (x and y) */}
+      <div className="overflow-auto custom-scrollbar flex-1 relative min-h-[150px]">
         <table className="w-full text-left border-collapse whitespace-nowrap min-w-[2000px]">
-          <thead className="bg-white sticky top-0 z-30 shadow-sm">
+          <thead className="bg-white sticky top-0 z-40 shadow-sm">
             <tr className="text-gray-700 text-sm font-bold border-b border-gray-200">
-              {/* Pinned Header Checkbox (z-50 to sit above Col 2) */}
-              <th className="p-4 w-[50px] min-w-[50px] max-w-[50px] text-center sticky left-0 bg-white z-50 border-r border-gray-100">
+              {/* Pinned Header Checkbox (z-50) */}
+              <th className="p-3 md:p-4 w-[50px] min-w-[50px] max-w-[50px] text-center sticky left-0 top-0 bg-white z-50 border-r border-gray-100">
                 <input 
                   type="checkbox" 
                   className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
@@ -283,26 +286,29 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
                 />
               </th>
               
-              {/* Pinned Header Order ID (left-[49px] to overlap 1px and hide gap) */}
-              <th className="p-4 border-r border-gray-100 sticky left-[49px] bg-white z-40 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Mã đơn hàng</th>
+              {/* Pinned Header Order ID (z-40) */}
+              <th className="p-3 md:p-4 border-r border-gray-100 sticky left-[49px] top-0 bg-white z-40 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-xs md:text-sm">
+                <span className="md:hidden">Mã ĐH</span>
+                <span className="hidden md:inline">Mã đơn hàng</span>
+              </th>
               
-              <th className="p-4 border-r border-gray-100">Đơn vị vận chuyển</th>
-              <th className="p-4 border-r border-gray-100 max-w-xs">Sản phẩm</th>
-              <th className="p-4 border-r border-gray-100 min-w-[220px]">Trạng thái</th>
-              <th className="p-4 border-r border-gray-100">Nền tảng</th>
-              <th className="p-4 border-r border-gray-100">Note</th>
+              <th className="p-3 md:p-4 border-r border-gray-100 sticky top-0 bg-white z-30">Đơn vị vận chuyển</th>
+              <th className="p-3 md:p-4 border-r border-gray-100 max-w-xs sticky top-0 bg-white z-30">Sản phẩm</th>
+              <th className="p-3 md:p-4 border-r border-gray-100 min-w-[220px] sticky top-0 bg-white z-30">Trạng thái</th>
+              <th className="p-3 md:p-4 border-r border-gray-100 sticky top-0 bg-white z-30">Nền tảng</th>
+              <th className="p-3 md:p-4 border-r border-gray-100 sticky top-0 bg-white z-30">Note</th>
               
               {/* Remaining Columns */}
-              <th className="p-4 border-r border-gray-100">Mã vận chuyển</th>
-              <th className="p-4 border-r border-gray-100">Tên khách</th>
-              <th className="p-4 border-r border-gray-100">SĐT khách</th>
-              <th className="p-4 border-r border-gray-100">Địa chỉ</th>
-              <th className="p-4 border-r border-gray-100">Giá</th>
-              <th className="p-4 border-r border-gray-100">Ngày</th>
-              <th className="p-4 border-r border-gray-100">Thời gian giao</th>
-              <th className="p-4 border-r border-gray-100">Mẫu</th>
+              <th className="p-3 md:p-4 border-r border-gray-100 sticky top-0 bg-white z-30">Mã vận chuyển</th>
+              <th className="p-3 md:p-4 border-r border-gray-100 sticky top-0 bg-white z-30">Tên khách</th>
+              <th className="p-3 md:p-4 border-r border-gray-100 sticky top-0 bg-white z-30">SĐT khách</th>
+              <th className="p-3 md:p-4 border-r border-gray-100 sticky top-0 bg-white z-30">Địa chỉ</th>
+              <th className="p-3 md:p-4 border-r border-gray-100 sticky top-0 bg-white z-30">Giá</th>
+              <th className="p-3 md:p-4 border-r border-gray-100 sticky top-0 bg-white z-30">Ngày</th>
+              <th className="p-3 md:p-4 border-r border-gray-100 sticky top-0 bg-white z-30">Thời gian giao</th>
+              <th className="p-3 md:p-4 border-r border-gray-100 sticky top-0 bg-white z-30">Mẫu</th>
               
-              <th className="p-4 text-center sticky right-0 bg-white border-l border-gray-100 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)] z-30">Thao tác</th>
+              <th className="p-3 md:p-4 text-center sticky right-0 top-0 bg-white border-l border-gray-100 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)] z-30">Thao tác</th>
             </tr>
           </thead>
           <tbody className="text-sm text-gray-700 divide-y divide-gray-100">
@@ -317,8 +323,8 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
                     onClick={() => handleSelectRow(order.id)}
                     className={`hover:bg-blue-50 transition-colors group cursor-pointer ${rowBg}`}
                   >
-                    {/* Pinned Body Checkbox (z-30 to sit above Col 2) */}
-                    <td className={`p-4 w-[50px] min-w-[50px] max-w-[50px] text-center sticky left-0 group-hover:bg-blue-50 z-30 border-r border-gray-100 ${rowBg}`}>
+                    {/* Pinned Body Checkbox (z-30) */}
+                    <td className={`p-3 md:p-4 w-[50px] min-w-[50px] max-w-[50px] text-center sticky left-0 group-hover:bg-blue-50 z-30 border-r border-gray-100 ${rowBg}`}>
                       <input 
                         type="checkbox" 
                         className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer pointer-events-none" 
@@ -327,74 +333,83 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
                       />
                     </td>
                     
-                    {/* Mã đơn hàng (Cột A) - Pinned (left-[49px] to overlap) */}
-                    <td className={`p-4 border-r border-gray-100 font-medium text-blue-600 sticky left-[49px] group-hover:bg-blue-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] ${rowBg}`}>
-                      {order.id.startsWith('_gen_') ? '' : order.id}
+                    {/* Mã đơn hàng (Cột A) - Pinned (z-20) - Truncated on mobile */}
+                    <td className={`p-2 md:p-4 border-r border-gray-100 font-medium text-blue-600 sticky left-[49px] group-hover:bg-blue-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-xs md:text-sm whitespace-nowrap ${rowBg}`}>
+                      {order.id.startsWith('_gen_') ? '' : (
+                        <>
+                          <span className="md:hidden" title={order.id}>
+                            {order.id.length > 5 ? `${order.id.slice(0, 5)}...` : order.id}
+                          </span>
+                          <span className="hidden md:inline">
+                            {order.id}
+                          </span>
+                        </>
+                      )}
                     </td>
 
-                    <td className="p-4 border-r border-gray-100 text-gray-600">
+                    <td className="p-3 md:p-4 border-r border-gray-100 text-gray-600">
                       {order.carrier || '---'}
                     </td>
 
-                    <td className="p-4 border-r border-gray-100 max-w-xs truncate" title={order.items.map(i => i.productName).join(', ')}>
+                    <td className="p-3 md:p-4 border-r border-gray-100 max-w-xs truncate" title={order.items.map(i => i.productName).join(', ')}>
                       {order.items.length > 0 ? order.items[0].productName : 'Chưa có SP'}
                       {order.items.length > 1 && <span className="text-gray-400 text-xs ml-1">+{order.items.length - 1}</span>}
                     </td>
 
-                    <td className="p-4 border-r border-gray-100">
+                    <td className="p-3 md:p-4 border-r border-gray-100">
                       <span className={`inline-block px-3 py-1.5 rounded-md text-xs font-semibold border ${getStatusColor(order.status)}`}>
                         {order.status}
                       </span>
                     </td>
 
-                    <td className="p-4 border-r border-gray-100">
+                    <td className="p-3 md:p-4 border-r border-gray-100">
                       <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase shadow-sm ${getPlatformStyle(order.platform)}`}>
                          {order.platform || 'SHOPEE'}
                       </span>
                     </td>
 
-                    <td className="p-4 border-r border-gray-100">
+                    <td className="p-3 md:p-4 border-r border-gray-100">
                       <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold shadow-sm ${getNoteStyle(order.note)}`}>
                         {order.note || 'Đơn thường'}
                       </span>
                     </td>
 
-                    <td className="p-4 border-r border-gray-100 text-gray-600 font-mono text-xs">
+                    <td className="p-3 md:p-4 border-r border-gray-100 text-gray-600 font-mono text-xs">
                       {order.trackingCode || '---'}
                     </td>
 
-                    <td className="p-4 border-r border-gray-100 font-medium text-gray-800">
+                    <td className="p-3 md:p-4 border-r border-gray-100 font-medium text-gray-800">
                       {order.customerName}
                     </td>
 
-                    <td className="p-4 border-r border-gray-100 text-gray-600">
+                    <td className="p-3 md:p-4 border-r border-gray-100 text-gray-600">
                       {order.customerPhone}
                     </td>
 
-                    <td className="p-4 border-r border-gray-100 text-gray-600 truncate max-w-[200px]" title={order.address}>
+                    <td className="p-3 md:p-4 border-r border-gray-100 text-gray-600 truncate max-w-[200px]" title={order.address}>
                       {order.address || '---'}
                     </td>
 
-                    <td className="p-4 border-r border-gray-100 font-medium text-gray-800">
+                    <td className="p-3 md:p-4 border-r border-gray-100 font-medium text-gray-800">
                       {order.totalAmount.toLocaleString('vi-VN')} ₫
                     </td>
 
-                    <td className="p-4 border-r border-gray-100 text-gray-600">
+                    <td className="p-3 md:p-4 border-r border-gray-100 text-gray-600">
                       {formatDateDisplay(order.createdAt)}
                     </td>
 
-                    <td className="p-4 border-r border-gray-100">
+                    <td className="p-3 md:p-4 border-r border-gray-100">
                       <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold shadow-sm ${getDeliveryStyle(order.deliveryDeadline)}`}>
                         {order.deliveryDeadline || 'Trước 23h59p'}
                       </span>
                     </td>
 
-                    <td className="p-4 border-r border-gray-100 text-gray-600">
+                    <td className="p-3 md:p-4 border-r border-gray-100 text-gray-600">
                       {order.templateStatus || 'Có mẫu'}
                     </td>
 
                     {/* Thao tác */}
-                    <td className="p-4 text-center sticky right-0 bg-white border-l border-gray-100 group-hover:bg-blue-50 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)] z-20" onClick={(e) => e.stopPropagation()}>
+                    <td className="p-3 md:p-4 text-center sticky right-0 bg-white border-l border-gray-100 group-hover:bg-blue-50 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)] z-20" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-2">
                         <button 
                            onClick={() => setViewingOrder(order)}
@@ -420,7 +435,7 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
       </div>
 
       {/* Pagination */}
-      <div className="p-4 border-t border-gray-200 flex items-center justify-between bg-white shrink-0">
+      <div className="p-3 md:p-4 border-t border-gray-200 flex items-center justify-between bg-white shrink-0">
         <div className="text-sm text-gray-500 hidden sm:block">
           Hiển thị {filteredOrders.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} đến {Math.min(currentPage * itemsPerPage, filteredOrders.length)} trong tổng số {filteredOrders.length}
         </div>
