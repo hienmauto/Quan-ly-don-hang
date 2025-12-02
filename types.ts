@@ -1,4 +1,5 @@
 
+
 export enum OrderStatus {
   PENDING = 'Chờ xử lý',
   PLACED = 'Đã lên đơn',
@@ -64,15 +65,22 @@ export interface DashboardStats {
 export type Role = 'admin' | 'user' | string;
 
 export type Permission = 
-  | 'view_dashboard'
-  | 'view_orders'
   | 'add_orders'      // Mới: Thêm đơn
   | 'edit_orders'     // Mới: Sửa đơn/trạng thái
-  | 'delete_orders'   // Mới: Xóa đơn
   | 'view_customers'
   | 'view_settings_personal' // Mới: Cài đặt cá nhân
   | 'view_settings_admin'    // Mới: Cài đặt hệ thống (Admin)
   | 'view_settings_roles';   // Mới: Quản lý tên vai trò
+
+// Danh sách tất cả các quyền (Dùng để gán full quyền cho Admin)
+export const ALL_PERMISSIONS: Permission[] = [
+  'add_orders',
+  'edit_orders',
+  'view_customers',
+  'view_settings_personal',
+  'view_settings_admin',
+  'view_settings_roles'
+];
 
 export interface User {
   username: string;

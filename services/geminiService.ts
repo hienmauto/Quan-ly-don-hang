@@ -66,54 +66,39 @@ export const extractOrderFromImage = async (base64Data: string, mimeType: string
             },
           },
           {
-            text: `Bạn là trợ lý AI nhập liệu đơn hàng. Nhiệm vụ: trích xuất thông tin từ ảnh (có thể là 1 đơn hoặc danh sách nhiều đơn) để điền vào bảng tính Excel.
+            text: `Bạn là trợ lý AI nhập liệu đơn hàng. Nhiệm vụ: trích xuất thông tin từ ảnh phiếu in đơn hàng (có thể là 1 đơn hoặc danh sách nhiều đơn) để điền vào hệ thống.
             
             Hãy trả về output là JSON Object có cấu trúc:
             { "orders": [ { ...order_details... } ] }
 
+            YÊU CẦU ĐẶC BIỆT VỀ SẢN PHẨM (RẤT QUAN TRỌNG):
+            1. Một đơn hàng có thể chứa NHIỀU sản phẩm. Hãy đọc kỹ phần "Nội dung hàng", "Tên sản phẩm", hoặc danh sách hàng hóa.
+            2. Nếu thấy danh sách đánh số (1., 2., 3...) hoặc gạch đầu dòng, hãy tách chúng thành từng item riêng biệt trong mảng 'items'.
+            3. Nếu ảnh ghi tổng số lượng (ví dụ "Tổng SL: 3") nhưng chỉ liệt kê gộp, hãy cố gắng tách ra.
+            4. Đọc chính xác Số lượng (SL) của từng món.
+            
             Chi tiết các trường trong mỗi order:
-            - id: Mã đơn hàng (nếu không thấy thì tự tạo mã ngẫu nhiên).
+            - id: Mã vận đơn hoặc Mã đơn hàng (ưu tiên Mã vận đơn nếu có).
             - trackingCode: Mã vận đơn (thường dưới mã vạch).
-            - carrier: Đơn vị vận chuyển (SPX, GHTK, Viettel Post, J&T...).
-            - customerName: Tên khách hàng.
-            - customerPhone: Số điện thoại.
-            - address: Địa chỉ giao hàng.
-            - platform: Phân tích logo hoặc thông tin trên phiếu gửi hàng để xác định nền tảng. CHỈ TRẢ VỀ MỘT TRONG CÁC GIÁ TRỊ SAU: "Shopee", "Lazada", "TikTok", "Zalo", "Facebook". Nếu không rõ, mặc định là "Shopee".
-            - totalAmount: Tổng tiền thu (số nguyên).
-            - createdAt: Ngày giờ đặt hàng theo định dạng "HH:mm dd-MM" (ví dụ: 10:22 01-12). Nếu không tìm thấy thông tin ngày giờ, hãy trả về một chuỗi trống.
-            - deliveryDeadline: Hạn giao hàng. 
-            - note: Phân tích bill, nếu thấy chữ "Hỏa tốc", "Express", "Gấp" thì trả về "Đơn hỏa tốc", ngược lại mặc định trả về "Đơn thường".
-            - items: Mảng sản phẩm. { productName: "tên món", quantity: 1, price: 0 }.
+            - carrier: Đơn vị vận chuyển (Viettel Post, SPX, GHTK, J&T...).
+            - customerName: Tên người nhận.
+            - customerPhone: SĐT người nhận.
+            - address: Địa chỉ người nhận.
+            - platform: "Shopee", "Lazada", "TikTok", "Zalo", "Facebook" (nhìn logo). Mặc định "Shopee".
+            - totalAmount: Tổng tiền thu người nhận (COD).
+            - createdAt: Ngày đặt hàng "HH:mm dd-MM".
+            - note: Nếu thấy "Hỏa tốc", "Express" -> "Đơn hỏa tốc". Ngược lại "Đơn thường".
+            - items: Mảng chứa các sản phẩm. { productName: "Tên đầy đủ", quantity: 1, price: 0 }.
             
-            QUY TẮC ĐẶT TÊN SẢN PHẨM (productName) - CỰC KỲ QUAN TRỌNG:
-            Hãy phân tích kỹ tên sản phẩm trong ảnh để trích xuất: Hãng xe, Dòng xe, Đời xe, Màu sắc, Số lượng (SL), và các mã sản phẩm (như f012, f002...).
-            Sau đó format lại tên sản phẩm theo đúng thứ tự ưu tiên các trường hợp sau:
+            QUY TẮC CHUẨN HÓA TÊN SẢN PHẨM:
+            - Nếu tên chứa "f012" -> "Flamingo F012"
+            - Nếu tên chứa "f002" -> "Flamingo F002"
+            - Nếu tên chứa "f011" -> "Flamingo F011 + [Mùi hương]"
+            - Nếu chứa "PVC" -> "[Hãng] [Dòng] [Đời] - Diamond [Màu]"
+            - Nếu chứa "cao su cao cấp" -> "[Hãng] [Dòng] [Đời] - Gold [Màu]"
+            - Nếu chứa "TPE" -> "[Hãng] [Dòng] [Đời] - TPE"
             
-            1. Nếu tên gốc chứa "f012" (không phân biệt hoa thường):
-               => Format: "Flamingo F012 + (SL: [Số lượng])"
-            
-            2. Nếu tên gốc chứa "f002" (không phân biệt hoa thường):
-               => Format: "Flamingo F002 + (SL: [Số lượng])"
-            
-            3. Nếu tên gốc chứa "f011" (không phân biệt hoa thường):
-               => Format: "Flamingo F011 + [Mùi hương] + (SL: [Số lượng])"
-               (Hãy trích xuất mùi hương như hương dâu, hương táo, hương đào, v.v...)
-
-            4. Nếu tên gốc chứa chữ "PVC" (hoặc PVC nguyên sinh):
-               => Format: "[Hãng xe] [Dòng xe] [Đời xe] - Diamond [Màu sắc] (SL: [Số lượng])"
-               Ví dụ: "Thảm lót sàn Toyota Yaris Hatchback PVC nguyên sinh, đen, 2019" -> "Toyota Yaris Hatchback 2019 - Diamond đen (SL: 1)"
-
-            5. Nếu tên gốc chứa chữ "cao su cao cấp":
-               => Format: "[Hãng xe] [Dòng xe] [Đời xe] - Gold [Màu sắc] (SL: [Số lượng])"
-               Ví dụ: "Thảm cao su cao cấp Toyota Vios 2020 màu kem" -> "Toyota Vios 2020 - Gold kem (SL: 1)"
-
-            6. Nếu tên gốc chứa chữ "TPE":
-               => Format: "[Hãng xe] [Dòng xe] [Đời xe] - TPE (SL: [Số lượng])"
-               Ví dụ: "Thảm Lót Sàn Ô Tô TPE Cao Cấp Toyota Corolla Cross 2019-2024" -> "Toyota Corolla Cross 2019-2024 - TPE (SL: 1)"
-
-            Nếu không thuộc các trường hợp trên, hãy giữ nguyên tên gốc hoặc tóm tắt ngắn gọn kèm (SL: số lượng).
-            
-            Trả về JSON chuẩn, không thêm markdown formatting.`,
+            Trả về JSON chuẩn không kèm markdown.`,
           },
         ],
       },
@@ -126,15 +111,8 @@ export const extractOrderFromImage = async (base64Data: string, mimeType: string
     const result = JSON.parse(jsonText);
 
     // --- Post Processing for Delivery Deadline ---
-    // Rule:
-    // If createdAt is Today -> deadline: "Trước 23h59p"
-    // If createdAt is Yesterday -> deadline: "Trước 11h59p"
-    // Else -> default to "Trước 23h59p"
-    
     if (result.orders && Array.isArray(result.orders)) {
         const now = new Date();
-        
-        // Helper to get "dd-MM" from a Date object
         const getDayMonth = (d: Date) => {
             const day = String(d.getDate()).padStart(2, '0');
             const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -147,23 +125,16 @@ export const extractOrderFromImage = async (base64Data: string, mimeType: string
         const yesterdayStr = getDayMonth(yesterday);
 
         result.orders.forEach((o: Partial<Order>) => {
-           // Default value
-           o.deliveryDeadline = 'Trước 23h59p';
+           o.deliveryDeadline = 'Trước 23h59p'; // Default
 
            if (o.createdAt) {
-               // The AI usually returns "HH:mm dd-MM" or just "dd-MM"
-               // We extract the "dd-MM" part.
                let datePart = '';
                const trimmed = o.createdAt.trim();
-               
                if (trimmed.includes(' ')) {
-                   // e.g. "10:22 01-12" -> pop gives "01-12"
                    datePart = trimmed.split(' ').pop() || '';
                } else {
                    datePart = trimmed;
                }
-               
-               // Normalize potential slashes to hyphens just in case
                datePart = datePart.replace(/\//g, '-');
                
                if (datePart === todayStr) {

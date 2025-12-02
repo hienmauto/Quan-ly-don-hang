@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Plus, Trash2, Upload, Loader2, Save, Download, Search, Image as ImageIcon, FileText } from 'lucide-react';
 import { Order, OrderStatus, OrderItem, Product } from '../types';
@@ -124,6 +125,16 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
   const calculateTotal = (items: OrderItem[]) => {
     return items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   };
+  
+  // Helper for displaying multi-line products
+  const getProductDisplayString = (order: Partial<Order>) => {
+    if (!order.items || order.items.length === 0) return '';
+    if (order.items.length === 1) return order.items[0].productName;
+    return order.items.map(i => {
+       if (i.quantity > 1) return `${i.productName} (SL: ${i.quantity})`;
+       return i.productName;
+    }).join('\n'); // Use newline for clearer list display
+  };
 
   // --- Handlers for Manual Form ---
   const addManualItem = () => {
@@ -175,7 +186,9 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setPendingFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+      // Capture files synchronously before clearing input
+      const selectedFiles = Array.from(e.target.files);
+      setPendingFiles(prev => [...prev, ...selectedFiles]);
     }
     // Reset input so same file can be selected again if needed
     if (uploadInputRef.current) uploadInputRef.current.value = '';
@@ -255,12 +268,9 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
   
   const updateImportedProductString = (index: number, value: string) => {
     const updated = [...importedOrders];
-    const currentItems = updated[index].items || [];
-    if (currentItems.length > 0) {
-      currentItems[0].productName = value;
-    } else {
-      updated[index].items = [{ productId: 'AI', productName: value, quantity: 1, price: 0 }];
-    }
+    // When editing, we flatten all items into a single item with the full string description
+    // This is because the backend Sheet likely expects a single string for "Product"
+    updated[index].items = [{ productId: 'AI', productName: value, quantity: 1, price: 0 }];
     setImportedOrders(updated);
   };
 
@@ -396,11 +406,13 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
                             <td className="p-0 border-r border-gray-100">
                               <input value={order.address || ''} onChange={e => updateImportedOrder(idx, 'address', e.target.value)} className="w-full px-3 py-2.5 bg-transparent outline-none focus:bg-white focus:ring-1 focus:ring-inset focus:ring-red-500" />
                             </td>
-                            <td className="p-0 border-r border-gray-100">
-                               <input 
-                                  value={order.items?.[0]?.productName || ''} 
+                            <td className="p-0 border-r border-gray-100 h-full">
+                               <textarea 
+                                  value={getProductDisplayString(order)} 
                                   onChange={e => updateImportedProductString(idx, e.target.value)} 
-                                  className="w-full px-3 py-2.5 bg-transparent outline-none focus:bg-white focus:ring-1 focus:ring-inset focus:ring-red-500" 
+                                  className="w-full h-full px-3 py-2.5 bg-transparent outline-none focus:bg-white focus:ring-1 focus:ring-inset focus:ring-red-500 resize-none block text-sm"
+                                  rows={Math.max(1, (order.items || []).length)}
+                                  style={{ minHeight: '44px', lineHeight: '1.4' }}
                                />
                             </td>
                             <td className="p-0 border-r border-gray-100">
@@ -742,6 +754,16 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
               </div>
               
               <div className="p-6">
+                 {/* Hidden Input moved outside for cleaner structure */}
+                 <input 
+                      type="file" 
+                      ref={uploadInputRef} 
+                      className="hidden" 
+                      accept="image/*,application/pdf"
+                      multiple
+                      onChange={handleFileSelect}
+                 />
+
                 {/* Drag & Drop Zone */}
                 <div 
                   className="border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl p-8 text-center cursor-pointer hover:bg-blue-100 transition-colors"
@@ -749,14 +771,6 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
                   onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
                   onDrop={handleDrop}
                 >
-                   <input 
-                      type="file" 
-                      ref={uploadInputRef} 
-                      className="hidden" 
-                      accept="image/*,application/pdf"
-                      multiple
-                      onChange={handleFileSelect}
-                   />
                    <Upload size={48} className="mx-auto text-blue-500 mb-4" />
                    <p className="text-lg font-medium text-gray-700">Drop files here, paste or <span className="text-blue-600 underline">browse files</span></p>
                    <p className="text-sm text-gray-500 mt-2">Hỗ trợ ảnh (JPG, PNG) và PDF</p>

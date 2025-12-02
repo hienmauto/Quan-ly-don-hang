@@ -1,7 +1,9 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { 
   User as UserIcon, Shield, Save, Plus, Trash2, Edit2, 
-  X, Check, Lock, LogOut, Tag
+  X, Check, Lock, LogOut, Tag, Eye, EyeOff, Loader2
 } from 'lucide-react';
 import { User, Permission, Role } from '../types';
 import { updateUser, getAllUsers, addUser, deleteUser, checkPasswordComplexity, getRoles, addRole, deleteRole, logout } from '../services/authService';
@@ -11,16 +13,12 @@ interface SettingsProps {
   onUpdateCurrentUser: (user: User) => void;
 }
 
-// Phân nhóm quyền hạn để hiển thị
 const PERMISSION_GROUPS = [
   {
-    title: 'Dashboard & Đơn Hàng',
+    title: 'Đơn Hàng',
     items: [
-      { id: 'view_dashboard', label: 'Xem Dashboard' },
-      { id: 'view_orders', label: 'Xem danh sách đơn hàng' },
       { id: 'add_orders', label: 'Thêm đơn hàng mới' },
       { id: 'edit_orders', label: 'Sửa & Cập nhật đơn hàng' },
-      { id: 'delete_orders', label: 'Xóa đơn hàng' },
     ]
   },
   {
@@ -42,6 +40,10 @@ const PERMISSION_GROUPS = [
 const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser }) => {
   const [activeTab, setActiveTab] = useState<'profile' | 'users' | 'roles'>('profile');
   const [notification, setNotification] = useState<{ msg: string, type: 'success' | 'error' } | null>(null);
+  
+  // Loading states
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // --- Profile State ---
   const [profileForm, setProfileForm] = useState({
@@ -52,17 +54,21 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
     newPassword: '',
     confirmPassword: ''
   });
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // --- Users Management State (Admin) ---
   const [usersList, setUsersList] = useState<User[]>([]);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Partial<User> | null>(null);
   
+  // State for Delete User Confirmation
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+
   // Custom Role State
   const [availableRoles, setAvailableRoles] = useState<string[]>([]);
   const [isAddingRole, setIsAddingRole] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
-  // State for Roles Tab
   const [rolesList, setRolesList] = useState<string[]>([]);
   const [roleTabInput, setRoleTabInput] = useState('');
 
@@ -76,16 +82,23 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
     role: 'user' as Role,
     permissions: [] as Permission[]
   });
+  const [showUserModalPassword, setShowUserModalPassword] = useState(false);
+
+  // Fetch Users function
+  const fetchUsers = async () => {
+    setIsLoadingUsers(true);
+    const users = await getAllUsers();
+    setUsersList(users);
+    setIsLoadingUsers(false);
+  };
 
   useEffect(() => {
-    // Luôn lấy danh sách roles mới nhất từ localStorage
     const roles = getRoles();
     setAvailableRoles(roles);
     setRolesList(roles);
 
     if (activeTab === 'users' && (currentUser.role === 'admin' || currentUser.permissions.includes('view_settings_admin'))) {
-      const users = getAllUsers();
-      setUsersList(users);
+      fetchUsers();
     }
   }, [activeTab, currentUser.role, currentUser.permissions]);
 
@@ -100,10 +113,9 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
   };
 
   // --- Profile Handlers ---
-  const handleProfileUpdate = (e: React.FormEvent) => {
+  const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Chỉ xử lý cập nhật mật khẩu vì thông tin cá nhân giờ là read-only
     if (profileForm.newPassword) {
         if (profileForm.newPassword !== profileForm.confirmPassword) {
             showNotify('Mật khẩu mới không khớp!', 'error');
@@ -115,11 +127,14 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
             return;
         }
 
+        setIsSubmitting(true);
         const updates: Partial<User> = {
           password: profileForm.newPassword
         };
 
-        const result = updateUser(currentUser.username, updates);
+        const result = await updateUser(currentUser.username, updates);
+        setIsSubmitting(false);
+
         if (result.success) {
           showNotify('Đổi mật khẩu thành công!', 'success');
           onUpdateCurrentUser({ ...currentUser, ...updates });
@@ -128,7 +143,6 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
           showNotify(result.message, 'error');
         }
     } else {
-      // Nếu không nhập mật khẩu mới thì không làm gì cả (vì info đã read-only)
       showNotify('Thông tin cá nhân không được phép chỉnh sửa.', 'error');
     }
   };
@@ -162,8 +176,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
   const handleOpenUserModal = (user?: User) => {
     setIsAddingRole(false);
     setNewRoleName('');
-    
-    // Refresh available roles
+    setShowUserModalPassword(false);
     setAvailableRoles(getRoles());
     
     if (user) {
@@ -186,7 +199,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
         email: '',
         phone: '',
         role: 'user',
-        permissions: ['view_dashboard', 'view_orders', 'view_settings_personal']
+        permissions: ['add_orders', 'edit_orders', 'view_customers', 'view_settings_personal']
       });
     }
     setIsUserModalOpen(true);
@@ -217,12 +230,14 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
     }
   };
 
-  const handleSaveUser = (e: React.FormEvent) => {
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     
     if ((!editingUser && userForm.password) || (editingUser && userForm.password)) {
         const complexity = checkPasswordComplexity(userForm.password);
         if (!complexity.valid) {
+            setIsSubmitting(false);
             showNotify(complexity.message || 'Mật khẩu yếu', 'error');
             return;
         }
@@ -238,16 +253,17 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
       };
       if (userForm.password) updates.password = userForm.password;
 
-      const res = updateUser(editingUser.username!, updates);
+      const res = await updateUser(editingUser.username!, updates);
       if (res.success) {
         showNotify('Cập nhật người dùng thành công', 'success');
-        setUsersList(getAllUsers());
+        await fetchUsers(); // Reload list from N8N
         setIsUserModalOpen(false);
       } else {
         showNotify(res.message, 'error');
       }
     } else {
       if (!userForm.username || !userForm.password) {
+        setIsSubmitting(false);
         showNotify('Vui lòng nhập tài khoản và mật khẩu', 'error');
         return;
       }
@@ -261,30 +277,38 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
         permissions: userForm.permissions,
         isActive: true
       };
-      const res = addUser(newUser);
+      const res = await addUser(newUser);
       if (res.success) {
         showNotify('Thêm người dùng thành công', 'success');
-        setUsersList(getAllUsers());
+        await fetchUsers(); // Reload list from N8N
         setIsUserModalOpen(false);
       } else {
         showNotify(res.message, 'error');
       }
     }
+    setIsSubmitting(false);
   };
 
-  const handleDeleteUser = (username: string) => {
-    if (confirm(`Bạn có chắc muốn xóa user "${username}"?`)) {
-      const res = deleteUser(username);
-      if (res.success) {
-        showNotify('Đã xóa người dùng', 'success');
-        setUsersList(getAllUsers());
-      } else {
-        showNotify(res.message, 'error');
-      }
+  const handleInitiateDeleteUser = (user: User) => {
+    setUserToDelete(user);
+  };
+
+  const handleConfirmDeleteUser = async () => {
+    if (!userToDelete) return;
+
+    setIsLoadingUsers(true);
+    const res = await deleteUser(userToDelete);
+    setIsLoadingUsers(false);
+    setUserToDelete(null); // Close modal
+
+    if (res.success) {
+      showNotify('Đã xóa người dùng', 'success');
+      await fetchUsers();
+    } else {
+      showNotify(res.message, 'error');
     }
   };
   
-  // Permission checks
   const canViewAdmin = currentUser.role === 'admin' || currentUser.permissions.includes('view_settings_admin');
   const canViewRoles = currentUser.role === 'admin' || currentUser.permissions.includes('view_settings_roles');
 
@@ -351,7 +375,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
       </div>
 
       {/* Content */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative">
         
         {/* === TAB PROFILE === */}
         {activeTab === 'profile' && (
@@ -392,32 +416,56 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
 
               <hr className="my-6 border-gray-100" />
               <h4 className="font-semibold text-gray-700 mb-2">Đổi mật khẩu</h4>
-              <p className="text-xs text-gray-500 mb-3 italic">* Yêu cầu: Chữ hoa, chữ thường, số, ký tự đặc biệt</p>
               
               <div className="grid grid-cols-2 gap-4">
                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu mới</label>
-                    <input 
-                      type="password"
-                      value={profileForm.newPassword} 
-                      onChange={e => setProfileForm({...profileForm, newPassword: e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none" 
-                    />
+                    <div className="relative">
+                      <input 
+                        type={showNewPassword ? "text" : "password"}
+                        value={profileForm.newPassword} 
+                        onChange={e => setProfileForm({...profileForm, newPassword: e.target.value})}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none pr-10" 
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                        tabIndex={-1}
+                      >
+                        {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
                  </div>
                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Xác nhận mật khẩu</label>
-                    <input 
-                      type="password"
-                      value={profileForm.confirmPassword} 
-                      onChange={e => setProfileForm({...profileForm, confirmPassword: e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none" 
-                    />
+                    <div className="relative">
+                      <input 
+                        type={showConfirmPassword ? "text" : "password"}
+                        value={profileForm.confirmPassword} 
+                        onChange={e => setProfileForm({...profileForm, confirmPassword: e.target.value})}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none pr-10" 
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                        tabIndex={-1}
+                      >
+                        {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
                  </div>
               </div>
               
               <div className="pt-4">
-                <button type="submit" className="flex items-center gap-2 bg-red-600 text-white px-6 py-2.5 rounded-lg hover:bg-red-700 transition-colors shadow-sm font-medium">
-                  <Save size={18} /> Lưu thay đổi
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting}
+                  className="flex items-center gap-2 bg-red-600 text-white px-6 py-2.5 rounded-lg hover:bg-red-700 transition-colors shadow-sm font-medium disabled:opacity-70"
+                >
+                  {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                  {isSubmitting ? 'Đang lưu...' : 'Lưu thay đổi'}
                 </button>
               </div>
             </div>
@@ -429,60 +477,84 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
           <div>
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-bold text-gray-800">Danh sách người dùng</h3>
-              <button 
-                onClick={() => handleOpenUserModal()}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium"
-              >
-                <Plus size={18} /> Thêm User
-              </button>
+              <div className="flex gap-2">
+                 <button 
+                  onClick={fetchUsers}
+                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                  title="Tải lại danh sách"
+                 >
+                   <Loader2 size={18} className={isLoadingUsers ? "animate-spin" : ""} />
+                 </button>
+                 <button 
+                  onClick={() => handleOpenUserModal()}
+                  className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium"
+                >
+                  <Plus size={18} /> Thêm User
+                </button>
+              </div>
             </div>
 
-            <div className="overflow-x-auto border rounded-lg">
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-gray-50">
-                  <tr className="text-xs font-bold text-gray-600 uppercase border-b border-gray-200">
-                    <th className="px-4 py-3">Tài khoản</th>
-                    <th className="px-4 py-3">Họ tên</th>
-                    <th className="px-4 py-3">Vai trò</th>
-                    <th className="px-4 py-3">Quyền hạn</th>
-                    <th className="px-4 py-3 text-right">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 text-sm">
-                   {usersList.map((user) => (
-                     <tr key={user.username} className="hover:bg-gray-50/50">
-                       <td className="px-4 py-3 font-medium text-gray-800">{user.username}</td>
-                       <td className="px-4 py-3">
-                          <div>{user.fullName}</div>
-                          <div className="text-xs text-gray-400">{user.email}</div>
-                       </td>
-                       <td className="px-4 py-3">
-                         <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${user.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'}`}>
-                           {user.role}
-                         </span>
-                       </td>
-                       <td className="px-4 py-3">
-                         <div className="flex flex-wrap gap-1">
-                           <span className="text-xs text-gray-500 font-medium bg-gray-100 px-1.5 py-0.5 rounded">{user.permissions.length} quyền</span>
-                         </div>
-                       </td>
-                       <td className="px-4 py-3 text-right">
-                         <div className="flex justify-end gap-2">
-                           <button onClick={() => handleOpenUserModal(user)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Sửa">
-                             <Edit2 size={16} />
-                           </button>
-                           {user.username !== 'admin' && user.username !== currentUser.username && (
-                             <button onClick={() => handleDeleteUser(user.username)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Xóa">
-                               <Trash2 size={16} />
-                             </button>
-                           )}
-                         </div>
-                       </td>
-                     </tr>
-                   ))}
-                </tbody>
-              </table>
-            </div>
+            {isLoadingUsers ? (
+              <div className="flex items-center justify-center h-40 bg-gray-50 rounded-lg border border-gray-200 border-dashed">
+                 <div className="text-center text-gray-500">
+                    <Loader2 className="animate-spin mx-auto mb-2 text-blue-500" size={30} />
+                    <p>Đang tải dữ liệu từ server...</p>
+                 </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-gray-50">
+                    <tr className="text-xs font-bold text-gray-600 uppercase border-b border-gray-200">
+                      <th className="px-4 py-3">Tài khoản</th>
+                      <th className="px-4 py-3">Họ tên</th>
+                      <th className="px-4 py-3">Vai trò</th>
+                      <th className="px-4 py-3">Quyền hạn</th>
+                      <th className="px-4 py-3 text-right">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-sm">
+                    {usersList.length > 0 ? (
+                      usersList.map((user) => (
+                        <tr key={user.username} className="hover:bg-gray-50/50">
+                          <td className="px-4 py-3 font-medium text-gray-800">{user.username}</td>
+                          <td className="px-4 py-3">
+                              <div>{user.fullName}</div>
+                              <div className="text-xs text-gray-400">{user.email}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${user.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'}`}>
+                              {user.role}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-1">
+                              <span className="text-xs text-gray-500 font-medium bg-gray-100 px-1.5 py-0.5 rounded">{user.permissions.length} quyền</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex justify-end gap-2">
+                              <button onClick={() => handleOpenUserModal(user)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Sửa">
+                                <Edit2 size={16} />
+                              </button>
+                              {user.username !== 'admin' && user.username !== currentUser.username && (
+                                <button onClick={() => handleInitiateDeleteUser(user)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Xóa">
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                       <tr>
+                          <td colSpan={5} className="text-center py-6 text-gray-500">Chưa có người dùng nào.</td>
+                       </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
@@ -543,8 +615,8 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
       {/* USER MODAL */}
       {isUserModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar animate-fade-in">
-             <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar animate-fade-in relative">
+             <div className="p-4 border-b flex justify-between items-center bg-gray-50 sticky top-0 bg-white z-10">
                <h3 className="font-bold text-gray-800 text-lg">{editingUser ? 'Sửa thông tin' : 'Thêm người dùng mới'}</h3>
                <button onClick={() => setIsUserModalOpen(false)}><X size={20} className="text-gray-400 hover:text-gray-600" /></button>
              </div>
@@ -563,15 +635,25 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
                       />
                    </div>
                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu {editingUser && <span className="text-xs font-normal text-gray-400">(nhập để đổi)</span>}</label>
-                      <input 
-                        type="password"
-                        required={!editingUser}
-                        value={userForm.password}
-                        onChange={e => setUserForm({...userForm, password: e.target.value})}
-                        className="w-full px-3 py-2.5 rounded-md bg-[#333] text-white border-none focus:ring-2 focus:ring-blue-500 outline-none"
-                        placeholder="Aa@123..."
-                      />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu {editingUser && <span className="text-xs font-normal text-gray-400">(để trống nếu không đổi)</span>}</label>
+                      <div className="relative">
+                        <input 
+                          type={showUserModalPassword ? "text" : "password"}
+                          required={!editingUser}
+                          value={userForm.password}
+                          onChange={e => setUserForm({...userForm, password: e.target.value})}
+                          className="w-full px-3 py-2.5 rounded-md bg-[#333] text-white border-none focus:ring-2 focus:ring-blue-500 outline-none pr-10"
+                          placeholder="Aa@123..."
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowUserModalPassword(!showUserModalPassword)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-200"
+                          tabIndex={-1}
+                        >
+                          {showUserModalPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
                    </div>
                 </div>
 
@@ -682,11 +764,60 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
                    </div>
                 </div>
 
-                <div className="pt-4 flex justify-end gap-3">
-                   <button type="button" onClick={() => setIsUserModalOpen(false)} className="px-4 py-2 border rounded-lg hover:bg-gray-50 text-red-600 border-red-200">Hủy</button>
-                   <button type="submit" className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium">Lưu</button>
+                <div className="pt-4 flex justify-end gap-3 sticky bottom-0 bg-white pb-2 border-t mt-4">
+                   <button 
+                    type="button" 
+                    onClick={() => setIsUserModalOpen(false)} 
+                    disabled={isSubmitting}
+                    className="px-4 py-2 border rounded-lg hover:bg-gray-50 text-red-600 border-red-200"
+                  >
+                    Hủy
+                  </button>
+                   <button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium flex items-center gap-2 disabled:opacity-70"
+                  >
+                    {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : 'Lưu'}
+                  </button>
                 </div>
              </form>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM DELETE USER MODAL */}
+      {userToDelete && (
+        <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md animate-fade-in p-6">
+            <div className="flex items-center gap-3 text-red-600 mb-4">
+              <div className="p-3 bg-red-100 rounded-full">
+                 <Trash2 size={24} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-800">Xóa người dùng?</h3>
+            </div>
+            
+            <p className="text-gray-600 mb-6 leading-relaxed">
+              Bạn có chắc chắn muốn xóa tài khoản <strong>{userToDelete.username}</strong> ({userToDelete.fullName})?
+              <br/><span className="text-sm text-red-500 mt-2 block font-medium">Hành động này không thể hoàn tác.</span>
+            </p>
+            
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setUserToDelete(null)}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors font-medium"
+              >
+                Hủy bỏ
+              </button>
+              <button 
+                onClick={handleConfirmDeleteUser}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium shadow-sm flex items-center gap-2"
+                disabled={isLoadingUsers}
+              >
+                {isLoadingUsers && <Loader2 className="animate-spin" size={16} />}
+                Xác nhận xóa
+              </button>
+            </div>
           </div>
         </div>
       )}

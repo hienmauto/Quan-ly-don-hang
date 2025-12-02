@@ -59,10 +59,25 @@ const getLocalTodayStr = () => {
   return `${hh}:${mm} ${dd}-${MM}`;
 };
 
+const formatItemsToString = (items: OrderItem[] | undefined): string => {
+  if (!items || items.length === 0) return '';
+  
+  if (items.length === 1) {
+    return items[0].productName;
+  }
+  
+  return items.map(i => {
+    // Nếu tên sản phẩm đã có chứa "SL:" hoặc "(SL: ...)" thì không add thêm quantity vào nữa
+    const nameLower = i.productName.toLowerCase();
+    if (nameLower.includes('sl:') || i.quantity <= 1) {
+      return i.productName;
+    }
+    return `${i.productName} (SL: ${i.quantity})`;
+  }).join(' + ');
+};
+
 const mapOrderToSheetRow = (order: Partial<Order>) => {
-  const productString = order.items && order.items.length > 0 
-    ? order.items[0].productName 
-    : '';
+  const productString = formatItemsToString(order.items);
 
   const statusValue = order.status || 'Đã in bill';
   const deliveryValue = order.deliveryDeadline || 'Trước 23h59p';
@@ -95,9 +110,7 @@ const mapOrderToSheetRow = (order: Partial<Order>) => {
 
 // Helper function to map order to the specific N8N JSON format
 const mapOrderToN8NPayload = (order: Partial<Order>) => {
-  const productString = order.items && order.items.length > 0 
-    ? order.items[0].productName 
-    : '';
+  const productString = formatItemsToString(order.items);
     
   // If ID is internal generated (_gen_), send as empty string
   let idToSend = order.id || '';
