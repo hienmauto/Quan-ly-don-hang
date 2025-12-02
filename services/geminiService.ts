@@ -86,22 +86,32 @@ export const extractOrderFromImage = async (base64Data: string, mimeType: string
             - items: Mảng sản phẩm. { productName: "tên món", quantity: 1, price: 0 }.
             
             QUY TẮC ĐẶT TÊN SẢN PHẨM (productName) - CỰC KỲ QUAN TRỌNG:
-            Hãy phân tích kỹ tên sản phẩm trong ảnh để trích xuất: Hãng xe, Dòng xe, Đời xe, Màu sắc, Số lượng (SL).
-            Sau đó format lại tên sản phẩm theo đúng 3 trường hợp sau:
+            Hãy phân tích kỹ tên sản phẩm trong ảnh để trích xuất: Hãng xe, Dòng xe, Đời xe, Màu sắc, Số lượng (SL), và các mã sản phẩm (như f012, f002...).
+            Sau đó format lại tên sản phẩm theo đúng thứ tự ưu tiên các trường hợp sau:
             
-            1. Nếu tên gốc chứa chữ "PVC" (hoặc PVC nguyên sinh):
+            1. Nếu tên gốc chứa "f012" (không phân biệt hoa thường):
+               => Format: "Flamingo F012 (SL: [Số lượng])"
+            
+            2. Nếu tên gốc chứa "f002" (không phân biệt hoa thường):
+               => Format: "Flamingo F002 (SL: [Số lượng])"
+            
+            3. Nếu tên gốc chứa "f011" (không phân biệt hoa thường):
+               => Format: "Flamingo F011 [Mùi hương] (SL: [Số lượng])"
+               (Hãy trích xuất mùi hương như hương dâu, hương táo, hương đào, v.v...)
+
+            4. Nếu tên gốc chứa chữ "PVC" (hoặc PVC nguyên sinh):
                => Format: "[Hãng xe] [Dòng xe] [Đời xe] - Diamond [Màu sắc] (SL: [Số lượng])"
                Ví dụ: "Thảm lót sàn Toyota Yaris Hatchback PVC nguyên sinh, đen, 2019" -> "Toyota Yaris Hatchback 2019 - Diamond đen (SL: 1)"
 
-            2. Nếu tên gốc chứa chữ "cao su cao cấp":
+            5. Nếu tên gốc chứa chữ "cao su cao cấp":
                => Format: "[Hãng xe] [Dòng xe] [Đời xe] - Gold [Màu sắc] (SL: [Số lượng])"
                Ví dụ: "Thảm cao su cao cấp Toyota Vios 2020 màu kem" -> "Toyota Vios 2020 - Gold kem (SL: 1)"
 
-            3. Nếu tên gốc chứa chữ "TPE":
+            6. Nếu tên gốc chứa chữ "TPE":
                => Format: "[Hãng xe] [Dòng xe] [Đời xe] - TPE (SL: [Số lượng])"
                Ví dụ: "Thảm Lót Sàn Ô Tô TPE Cao Cấp Toyota Corolla Cross 2019-2024" -> "Toyota Corolla Cross 2019-2024 - TPE (SL: 1)"
 
-            Nếu không thuộc 3 trường hợp trên, hãy giữ nguyên tên gốc hoặc tóm tắt ngắn gọn kèm (SL: số lượng).
+            Nếu không thuộc các trường hợp trên, hãy giữ nguyên tên gốc hoặc tóm tắt ngắn gọn kèm (SL: số lượng).
             
             Trả về JSON chuẩn, không thêm markdown formatting.`,
           },
