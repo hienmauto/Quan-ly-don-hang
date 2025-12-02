@@ -281,7 +281,8 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
+    // Updated: supports-[height:100dvh]:h-[100dvh] for better mobile browser support
+    <div className="flex h-screen supports-[height:100dvh]:h-[100dvh] bg-slate-50 overflow-hidden">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
       {/* Login Modal */}
@@ -443,7 +444,8 @@ const App: React.FC = () => {
         </header>
 
         {/* View Content */}
-        <div className="flex-1 overflow-hidden p-4 md:p-6 relative">
+        {/* Updated: Use overflow-y-auto for Dashboard/Settings to allow scrolling on Mobile. Keep overflow-hidden for Orders. */}
+        <div className={`flex-1 p-4 md:p-6 relative w-full ${currentView === 'orders' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
           {currentView === 'dashboard' && <Dashboard orders={orders} />}
           
           {currentView === 'orders' && (
@@ -459,7 +461,7 @@ const App: React.FC = () => {
           )}
 
           {currentView === 'customers' && (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400 bg-white rounded-xl border border-dashed border-gray-300">
+            <div className="flex flex-col items-center justify-center h-full text-gray-400 bg-white rounded-xl border border-dashed border-gray-300 min-h-[400px]">
               <Users size={48} className="mb-4 text-gray-300" />
               <p className="text-lg font-medium">Quản lý khách hàng đang được phát triển</p>
             </div>
