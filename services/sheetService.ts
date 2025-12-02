@@ -1,3 +1,4 @@
+
 import { Order, OrderStatus, OrderItem } from '../types';
 
 const SHEET_ID = '1HARjln1eTmMPJo1WX6n0KHX-UtLst0PPB8LgBy4-5CQ';
@@ -12,6 +13,7 @@ const N8N_ADD_WEBHOOK_URL = 'https://n8n.hienmauto.com/webhook/quan-ly-don-hang/
 const N8N_UPDATE_ONE_WEBHOOK_URL = 'https://n8n.hienmauto.com/webhook/quan-ly-don-hang/update-nhieu-don';
 const N8N_UPDATE_BULK_WEBHOOK_URL = 'https://n8n.hienmauto.com/webhook/quan-ly-don-hang/update-nhieu-don';
 const N8N_DELETE_WEBHOOK_URL = 'https://n8n.hienmauto.com/webhook/quan-ly-don-hang/xoa-don';
+const N8N_STATS_WEBHOOK_URL = 'https://n8n.hienmauto.com/webhook/quan-ly-don-hang/don-da-gui';
 
 export const fetchOrdersFromSheet = async (): Promise<Order[]> => {
   try {
@@ -19,12 +21,31 @@ export const fetchOrdersFromSheet = async (): Promise<Order[]> => {
     if (!response.ok) throw new Error('Failed to fetch sheet');
     const text = await response.text();
     const orders = parseCSV(text);
-    // Filter out orders with status 'SENT' (Đã gửi)
-    const activeOrders = orders.filter(order => order.status !== OrderStatus.SENT);
-    // Reverse to show newest first
-    return activeOrders.reverse();
+    // Return all orders (reversed to show newest first)
+    return orders.reverse();
   } catch (error) {
     console.error('Error fetching sheet:', error);
+    return [];
+  }
+};
+
+// Hàm lấy dữ liệu thống kê từ N8N (Đơn đã gửi/Hoàn thành/Trả hàng...)
+export const fetchN8NStatsData = async (): Promise<any[]> => {
+  try {
+    const response = await fetch(N8N_STATS_WEBHOOK_URL);
+    if (!response.ok) throw new Error('Failed to fetch stats from N8N');
+    const data = await response.json();
+    // Giả sử N8N trả về mảng các object đơn hàng (hoặc ít nhất chứa status và ngày)
+    if (Array.isArray(data)) {
+      return data;
+    }
+    // Nếu trả về object có chứa key data/orders
+    if (data && Array.isArray(data.data)) return data.data;
+    if (data && Array.isArray(data.orders)) return data.orders;
+    
+    return [];
+  } catch (error) {
+    console.error('Error fetching N8N stats:', error);
     return [];
   }
 };

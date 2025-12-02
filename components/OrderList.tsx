@@ -1,8 +1,9 @@
+
 import React, { useState } from 'react';
 import { 
   Search, Eye, 
   ChevronLeft, ChevronRight, FileText, CheckSquare, XCircle, X,
-  User, MapPin, Truck, Calendar, Package, AlertTriangle, Lock
+  User, MapPin, Truck, Calendar, Package, AlertTriangle, Lock, Copy, Check, RefreshCcw
 } from 'lucide-react';
 import { Order, OrderStatus } from '../types';
 
@@ -12,7 +13,8 @@ interface OrderListProps {
   onDelete: (id: string) => void;
   onStatusChange: (id: string, newStatus: OrderStatus) => void;
   onBulkUpdate: (ids: string[], updates: { status?: OrderStatus, templateStatus?: string }) => void;
-  onBulkDelete: (ids: string[]) => void; // New prop for bulk delete
+  onBulkDelete: (ids: string[]) => void;
+  onRefresh: () => void;
 }
 
 // Define the strictly allowed statuses for selection
@@ -20,10 +22,37 @@ const ALLOWED_STATUSES = [
   OrderStatus.PLACED,
   OrderStatus.PRINTED,
   OrderStatus.PACKED,
-  OrderStatus.SENT
+  OrderStatus.SENT,
+  OrderStatus.RETURNED // Added Returned to dropdown if user wants to mark it manually
 ];
 
-export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, onStatusChange, onBulkUpdate, onBulkDelete }) => {
+// Helper Component for Copy Button
+const CopyButton = ({ text, className = "" }: { text: string | undefined, className?: string }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!text || text === '---') return;
+    
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (!text || text === '---') return null;
+
+  return (
+    <button
+      onClick={handleCopy}
+      className={`text-gray-400 hover:text-blue-600 transition-colors p-1 inline-flex items-center justify-center ${className}`}
+      title="Sao chép nội dung"
+    >
+      {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+    </button>
+  );
+};
+
+export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, onStatusChange, onBulkUpdate, onBulkDelete, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -46,6 +75,11 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
 
   // Filter Logic
   const filteredOrders = orders.filter(order => {
+    // Filter out orders with status 'Đã gửi'
+    if (order.status === OrderStatus.SENT) {
+      return false;
+    }
+
     const matchesSearch = 
       order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -75,6 +109,7 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
     if (s.includes('gửi') || s.includes('sent')) return 'text-teal-700 bg-teal-50 border-teal-100';
     if (s.includes('thành công') || s.includes('giao')) return 'text-green-700 bg-green-50 border-green-100';
     if (s.includes('hủy') || s.includes('cancelled')) return 'text-red-700 bg-red-50 border-red-100';
+    if (s.includes('trả') || s.includes('returned')) return 'text-red-800 bg-red-100 border-red-200';
     return 'text-gray-700 bg-gray-50 border-gray-100';
   };
 
@@ -211,6 +246,14 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
               </button>
             </div>
           )}
+
+          <button 
+            onClick={onRefresh}
+            className="p-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors bg-white shadow-sm"
+            title="Làm mới dữ liệu"
+          >
+            <RefreshCcw size={20} />
+          </button>
 
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -532,7 +575,7 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
         </div>
       )}
 
-      {/* View Detail Modal - (No changes needed here) */}
+      {/* View Detail Modal */}
       {viewingOrder && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm"
@@ -559,7 +602,12 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
               <div className="flex flex-wrap gap-4 justify-between items-start mb-6">
                 <div>
                    <span className="text-sm text-gray-500 font-medium">Mã đơn hàng</span>
-                   <p className="text-2xl font-bold text-gray-800 tracking-tight">{viewingOrder.id.startsWith('_gen_') ? '---' : viewingOrder.id}</p>
+                   <div className="flex items-center gap-2">
+                      <p className="text-2xl font-bold text-gray-800 tracking-tight">
+                         {viewingOrder.id.startsWith('_gen_') ? '---' : viewingOrder.id}
+                      </p>
+                      {!viewingOrder.id.startsWith('_gen_') && <CopyButton text={viewingOrder.id} />}
+                   </div>
                    <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
                       <Calendar size={14} /> Ngày tạo: <span className="font-medium text-gray-700">{formatDateDisplay(viewingOrder.createdAt)}</span>
                    </p>
@@ -582,11 +630,24 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
                        <User size={18} /> Khách hàng
                     </h4>
                     <div className="space-y-2 text-sm">
-                       <p className="flex justify-between"><span className="text-gray-500">Họ tên:</span> <span className="text-gray-900 font-bold text-right">{viewingOrder.customerName}</span></p>
-                       <p className="flex justify-between"><span className="text-gray-500">SĐT:</span> <span className="text-gray-900 font-bold text-right">{viewingOrder.customerPhone}</span></p>
+                       <p className="flex justify-between items-center">
+                          <span className="text-gray-500">Họ tên:</span> 
+                          <span className="text-gray-900 font-bold text-right flex items-center gap-1 justify-end">
+                             {viewingOrder.customerName} <CopyButton text={viewingOrder.customerName} />
+                          </span>
+                       </p>
+                       <p className="flex justify-between items-center">
+                          <span className="text-gray-500">SĐT:</span> 
+                          <span className="text-gray-900 font-bold text-right flex items-center gap-1 justify-end">
+                             {viewingOrder.customerPhone} <CopyButton text={viewingOrder.customerPhone} />
+                          </span>
+                       </p>
                        <div className="pt-2 border-t border-blue-200/50 mt-2">
                           <p className="text-gray-500 mb-1 flex items-center gap-1"><MapPin size={14} /> Địa chỉ:</p>
-                          <p className="font-medium text-gray-900 leading-snug">{viewingOrder.address}</p>
+                          <div className="flex items-start justify-between gap-2">
+                             <p className="font-medium text-gray-900 leading-snug">{viewingOrder.address}</p>
+                             <CopyButton text={viewingOrder.address} className="mt-0.5 shrink-0" />
+                          </div>
                        </div>
                     </div>
                  </div>
@@ -596,8 +657,18 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
                        <Truck size={18} /> Vận chuyển & Thông tin
                     </h4>
                     <div className="space-y-2 text-sm">
-                       <p className="flex justify-between"><span className="text-gray-500">Đơn vị VC:</span> <span className="text-gray-900 font-bold text-right">{viewingOrder.carrier || '---'}</span></p>
-                       <p className="flex justify-between"><span className="text-gray-500">Mã vận đơn:</span> <span className="font-mono font-medium text-purple-700 text-right">{viewingOrder.trackingCode || '---'}</span></p>
+                       <p className="flex justify-between items-center">
+                          <span className="text-gray-500">Đơn vị VC:</span> 
+                          <span className="text-gray-900 font-bold text-right flex items-center gap-1 justify-end">
+                             {viewingOrder.carrier || '---'} <CopyButton text={viewingOrder.carrier} />
+                          </span>
+                       </p>
+                       <p className="flex justify-between items-center">
+                          <span className="text-gray-500">Mã vận đơn:</span> 
+                          <span className="font-mono font-medium text-purple-700 text-right flex items-center gap-1 justify-end">
+                             {viewingOrder.trackingCode || '---'} <CopyButton text={viewingOrder.trackingCode} />
+                          </span>
+                       </p>
                        <p className="flex justify-between"><span className="text-gray-500">Hạn giao:</span> <span className={`font-bold text-right px-2 py-0.5 rounded text-xs ${getDeliveryStyle(viewingOrder.deliveryDeadline)}`}>{viewingOrder.deliveryDeadline}</span></p>
                        <p className="flex justify-between"><span className="text-gray-500">Loại đơn:</span> <span className={`font-medium text-right px-2 py-0.5 rounded text-xs ${getNoteStyle(viewingOrder.note)}`}>{viewingOrder.note}</span></p>
                        <p className="flex justify-between border-t border-purple-200 pt-2 mt-2"><span className="text-gray-500">Trạng thái mẫu:</span> <span className="font-medium text-right text-gray-800">{viewingOrder.templateStatus}</span></p>
@@ -615,7 +686,10 @@ export const OrderList: React.FC<OrderListProps> = ({ orders, onEdit, onDelete, 
                     {viewingOrder.items.map((item, idx) => (
                        <div key={idx} className="p-4 flex justify-between items-center hover:bg-gray-50/50">
                           <div className="flex-1 pr-4">
-                             <p className="font-medium text-gray-800 break-words">{item.productName}</p>
+                             <div className="flex items-center gap-1">
+                                 <p className="font-medium text-gray-800 break-words">{item.productName}</p>
+                                 <CopyButton text={item.productName} />
+                             </div>
                              <p className="text-xs text-gray-500 mt-1">Số lượng: {item.quantity}</p>
                           </div>
                           <p className="font-medium text-gray-700 whitespace-nowrap">{(item.price * item.quantity).toLocaleString('vi-VN')} ₫</p>

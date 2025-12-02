@@ -1,3 +1,4 @@
+
 export enum OrderStatus {
   PENDING = 'Chờ xử lý',
   PLACED = 'Đã lên đơn',
@@ -7,6 +8,7 @@ export enum OrderStatus {
   SENT = 'Đã gửi',
   DELIVERED = 'Đã giao thành công',
   CANCELLED = 'Đã hủy',
+  RETURNED = 'Trả hàng',
 }
 
 export interface Product {

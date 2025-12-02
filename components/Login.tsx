@@ -1,13 +1,16 @@
+
 import React, { useState } from 'react';
-import { User, Lock, ArrowRight, AlertCircle, ShieldCheck } from 'lucide-react';
+import { User, Lock, ArrowRight, AlertCircle, ShieldCheck, X } from 'lucide-react';
 import { login } from '../services/authService';
 import { User as UserType } from '../types';
 
 interface LoginProps {
   onLoginSuccess: (user: UserType) => void;
+  onClose?: () => void;
+  isModal?: boolean;
 }
 
-const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
+const Login: React.FC<LoginProps> = ({ onLoginSuccess, onClose, isModal = false }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -32,10 +35,24 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setIsLoading(false);
   };
 
+  const containerClasses = isModal 
+    ? "bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col relative animate-fade-in"
+    : "bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col md:flex-row";
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col md:flex-row">
+    <div className={isModal ? "fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" : "min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4"}>
+      <div className={containerClasses} onClick={e => e.stopPropagation()}>
         
+        {/* Close Button if Modal */}
+        {isModal && onClose && (
+          <button 
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100"
+          >
+            <X size={24} />
+          </button>
+        )}
+
         {/* Login Form */}
         <div className="w-full p-8 md:p-10">
           <div className="text-center mb-8">

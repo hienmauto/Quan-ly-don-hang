@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, ShoppingCart, Users, Settings as SettingsIcon, 
-  Menu, Bell, PlusCircle, LogOut, Loader2, X 
+  Menu, Bell, PlusCircle, LogOut, Loader2, X, LogIn 
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import { OrderList } from './components/OrderList';
@@ -33,6 +34,7 @@ const App: React.FC = () => {
   // --- Auth State ---
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
   // --- App State ---
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
@@ -75,18 +77,24 @@ const App: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Fetch data from Google Sheet on mount (only if authenticated)
+  // Helper to fetch data
+  const fetchData = async () => {
+    setIsLoading(true);
+    const sheetOrders = await fetchOrdersFromSheet();
+    setOrders(sheetOrders);
+    setIsLoading(false);
+  };
+
+  // Fetch data from Google Sheet on mount
   useEffect(() => {
-    if (currentUser) {
-      const loadData = async () => {
-        setIsLoading(true);
-        const sheetOrders = await fetchOrdersFromSheet();
-        setOrders(sheetOrders);
-        setIsLoading(false);
-      };
-      loadData();
-    }
-  }, [currentUser]);
+    fetchData();
+  }, []); 
+
+  // Handler for Refresh Button
+  const handleRefreshData = async () => {
+    await fetchData();
+    setToast({ message: 'Dữ liệu đã được làm mới', type: 'success' });
+  };
 
   // --- Permission Helpers ---
   const hasPermission = (perm: Permission) => {
@@ -98,20 +106,24 @@ const App: React.FC = () => {
   // --- Handlers ---
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
-    // Set default view based on permissions
-    if (user.role !== 'admin' && !user.permissions.includes('view_dashboard')) {
-       if (user.permissions.includes('view_orders')) setCurrentView('orders');
-       else if (user.permissions.includes('view_settings_personal') || user.permissions.includes('view_settings_admin')) setCurrentView('settings');
-    }
+    setIsLoginModalOpen(false);
+    setToast({ message: `Xin chào, ${user.fullName}`, type: 'success' });
   };
 
   const handleLogout = () => {
     performLogout();
     setCurrentUser(null);
     setCurrentView('dashboard');
+    setIsProfileMenuOpen(false);
   };
 
+  // Keep restricted: Add Order
   const handleAddOrder = () => {
+    if (!currentUser) {
+      setToast({ message: 'Vui lòng đăng nhập để tạo đơn hàng mới', type: 'error' });
+      setIsLoginModalOpen(true);
+      return;
+    }
     if (!hasPermission('add_orders')) {
       setToast({ message: 'Bạn không có quyền thêm đơn hàng', type: 'error' });
       return;
@@ -120,99 +132,94 @@ const App: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  // Keep restricted: Edit Full Order Details
   const handleEditOrder = (order: Order) => {
+    if (!currentUser) {
+      setToast({ message: 'Vui lòng đăng nhập để sửa đơn hàng', type: 'error' });
+      setIsLoginModalOpen(true);
+      return;
+    }
     if (!hasPermission('edit_orders')) {
-      setToast({ message: 'Bạn không có quyền sửa đơn hàng', type: 'error' });
+      setToast({ message: 'Bạn không có quyền chỉnh sửa đơn hàng', type: 'error' });
       return;
     }
     setEditingOrder(order);
     setIsModalOpen(true);
   };
 
+  // Public: Delete Order
   const handleDeleteOrder = async (id: string) => {
-    if (!hasPermission('delete_orders')) {
-      setToast({ message: 'Bạn không có quyền xóa đơn hàng', type: 'error' });
-      return;
-    }
     if (confirm('Bạn có chắc chắn muốn xóa đơn hàng này?')) {
       handleBulkDelete([id]);
     }
   };
 
+  // Public: Status Change
   const handleStatusChange = (id: string, newStatus: OrderStatus) => {
-    if (!hasPermission('edit_orders')) return;
-    setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
+     // Update UI optimistic
+     setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
   };
 
   // Helper Delay
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+  // Public: Bulk Update (Status/Template/Cancel)
   const handleBulkUpdate = async (ids: string[], updates: { status?: OrderStatus, templateStatus?: string }) => {
-    if (!hasPermission('edit_orders')) {
-      setToast({ message: 'Bạn không có quyền cập nhật đơn hàng', type: 'error' });
-      return;
-    }
+      const updatedOrders = orders.map(o => {
+        if (ids.includes(o.id)) {
+          return { 
+            ...o, 
+            status: updates.status || o.status,
+            templateStatus: updates.templateStatus || o.templateStatus
+          };
+        }
+        return o;
+      });
+      setOrders(updatedOrders);
 
-    const updatedOrders = orders.map(o => {
-      if (ids.includes(o.id)) {
-        return { 
-          ...o, 
-          status: updates.status || o.status,
-          templateStatus: updates.templateStatus || o.templateStatus
-        };
-      }
-      return o;
-    });
-    setOrders(updatedOrders);
-
-    setIsLoading(true);
-    const changedOrders = updatedOrders.filter(o => ids.includes(o.id));
-
-    await updateBatchOrdersInSheet(changedOrders);
-
-    if (updates.status === OrderStatus.CANCELLED) {
-      await sendDeleteOrdersToWebhook(changedOrders);
-      setToast({ message: 'Hủy đơn thành công!', type: 'success' });
-    } else {
-      // Use single update webhook if only 1 order is selected, otherwise use bulk webhook
-      if (changedOrders.length === 1) {
-        await sendUpdateOrderToWebhook(changedOrders[0]);
-      } else {
-        await sendBulkUpdateOrdersToWebhook(changedOrders);
-      }
-      setToast({ message: 'Cập nhật thành công!', type: 'success' });
-    }
-    
-    await delay(2000);
-    const newSheetOrders = await fetchOrdersFromSheet();
-    setOrders(newSheetOrders);
-    setIsLoading(false);
-  };
-  
-  const handleBulkDelete = async (ids: string[]) => {
-    if (!hasPermission('delete_orders')) {
-      setToast({ message: 'Bạn không có quyền xóa đơn hàng', type: 'error' });
-      return;
-    }
-
-    setOrders(prev => prev.filter(o => !ids.includes(o.id)));
-    
-    const rowIndexesToDelete: number[] = [];
-    orders.forEach(o => {
-      if (ids.includes(o.id) && o.rowIndex) {
-        rowIndexesToDelete.push(o.rowIndex);
-      }
-    });
-
-    if (rowIndexesToDelete.length > 0) {
       setIsLoading(true);
-      await deleteBatchOrdersFromSheet(rowIndexesToDelete);
-      await delay(2500);
+      const changedOrders = updatedOrders.filter(o => ids.includes(o.id));
+
+      await updateBatchOrdersInSheet(changedOrders);
+
+      if (updates.status === OrderStatus.CANCELLED) {
+        await sendDeleteOrdersToWebhook(changedOrders);
+        setToast({ message: 'Hủy đơn thành công!', type: 'success' });
+      } else {
+        if (changedOrders.length === 1) {
+          await sendUpdateOrderToWebhook(changedOrders[0]);
+        } else {
+          await sendBulkUpdateOrdersToWebhook(changedOrders);
+        }
+        setToast({ message: 'Cập nhật thành công!', type: 'success' });
+      }
+      
+      await delay(2000);
       const newSheetOrders = await fetchOrdersFromSheet();
       setOrders(newSheetOrders);
       setIsLoading(false);
-      setToast({ message: 'Xóa đơn hàng thành công!', type: 'success' });
-    }
+  };
+  
+  // Public: Bulk Delete
+  const handleBulkDelete = async (ids: string[]) => {
+      setOrders(prev => prev.filter(o => !ids.includes(o.id)));
+      
+      const rowIndexesToDelete: number[] = [];
+      orders.forEach(o => {
+        if (ids.includes(o.id) && o.rowIndex) {
+          rowIndexesToDelete.push(o.rowIndex);
+        }
+      });
+
+      if (rowIndexesToDelete.length > 0) {
+        setIsLoading(true);
+        await deleteBatchOrdersFromSheet(rowIndexesToDelete);
+        await delay(2500);
+        const newSheetOrders = await fetchOrdersFromSheet();
+        setOrders(newSheetOrders);
+        setIsLoading(false);
+        setToast({ message: 'Xóa đơn hàng thành công!', type: 'success' });
+      }
   };
 
   const handleSubmitOrder = (data: Order | Order[]) => {
@@ -228,17 +235,24 @@ const App: React.FC = () => {
     setToast({ message: 'Lưu đơn hàng thành công!', type: 'success' });
   };
 
-  const SidebarItem = ({ view, icon: Icon, label, reqPerms }: { view: ViewState, icon: any, label: string, reqPerms: Permission[] }) => {
-    // Show item if user has AT LEAST ONE of the required permissions
-    const hasAccess = currentUser?.role === 'admin' || reqPerms.some(p => currentUser?.permissions.includes(p));
+  const SidebarItem = ({ view, icon: Icon, label, needsLogin = false }: { view: ViewState, icon: any, label: string, needsLogin?: boolean }) => {
+    let isVisible = true;
+    if (currentUser) {
+        if (view === 'customers' && !hasPermission('view_customers')) isVisible = false;
+        if (view === 'settings' && (!hasPermission('view_settings_personal') && !hasPermission('view_settings_admin'))) isVisible = false;
+    }
     
-    if (!hasAccess) return null;
-    
+    if (!isVisible) return null;
+
     return (
       <button
         onClick={() => {
+          if (needsLogin && !currentUser) {
+             setIsLoginModalOpen(true);
+             if (window.innerWidth < 768) setIsSidebarOpen(false);
+             return;
+          }
           setCurrentView(view);
-          // On mobile, auto-close sidebar when clicking an item
           if (window.innerWidth < 768) setIsSidebarOpen(false);
         }}
         className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group
@@ -266,14 +280,15 @@ const App: React.FC = () => {
     );
   }
 
-  if (!currentUser) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
-  }
-
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
+      {/* Login Modal */}
+      {isLoginModalOpen && (
+        <Login onLoginSuccess={handleLoginSuccess} onClose={() => setIsLoginModalOpen(false)} isModal={true} />
+      )}
+
       {/* Mobile Overlay */}
       {isSidebarOpen && (
         <div 
@@ -301,7 +316,6 @@ const App: React.FC = () => {
             )}
           </div>
 
-          {/* Close Button for Mobile */}
           <button 
             onClick={() => setIsSidebarOpen(false)}
             className="md:hidden text-gray-500 hover:bg-gray-100 p-1.5 rounded-lg transition-colors"
@@ -311,156 +325,156 @@ const App: React.FC = () => {
         </div>
 
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
-          <SidebarItem view="dashboard" icon={LayoutDashboard} label="Tổng Quan" reqPerms={['view_dashboard']} />
-          <SidebarItem view="orders" icon={ShoppingCart} label="Đơn Hàng" reqPerms={['view_orders']} />
-          <SidebarItem view="customers" icon={Users} label="Khách Hàng" reqPerms={['view_customers']} />
-          {/* Settings requires either personal OR admin access */}
-          <SidebarItem view="settings" icon={SettingsIcon} label="Cài Đặt" reqPerms={['view_settings_personal', 'view_settings_admin']} />
+          <SidebarItem view="dashboard" icon={LayoutDashboard} label="Tổng Quan" />
+          <SidebarItem view="orders" icon={ShoppingCart} label="Đơn Hàng" />
+          <SidebarItem view="customers" icon={Users} label="Khách Hàng" needsLogin={true} />
+          <SidebarItem view="settings" icon={SettingsIcon} label="Cài Đặt" needsLogin={true} />
         </nav>
 
-        <div className="p-4 border-t border-gray-100 shrink-0">
-           <button 
-             onClick={handleLogout}
-             className={`w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-lg transition-colors ${!isSidebarOpen && 'justify-center'}`}
-           >
-             <LogOut size={20} />
-             {isSidebarOpen && <span className="font-medium">Đăng xuất</span>}
-           </button>
-        </div>
+        {currentUser && (
+          <div className="p-4 border-t border-gray-100 shrink-0">
+             <button 
+               onClick={handleLogout}
+               className={`w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors
+                 ${!isSidebarOpen && 'justify-center px-2'}
+               `}
+               title="Đăng xuất"
+             >
+               <LogOut size={20} />
+               <span className={`font-medium ${!isSidebarOpen && 'hidden md:hidden'}`}>Đăng xuất</span>
+             </button>
+          </div>
+        )}
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-        {/* Header */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-sm z-10 shrink-0">
-          <div className="flex items-center gap-4">
+      <main className="flex-1 flex flex-col h-full overflow-hidden w-full">
+        {/* Top Header */}
+        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-6 shrink-0 z-30">
+          <div className="flex items-center gap-3">
             <button 
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 hover:bg-gray-100 rounded-lg text-gray-600 transition-colors"
+              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors md:hidden"
             >
               <Menu size={20} />
             </button>
-            <h2 className="text-lg font-semibold text-gray-800 hidden sm:block">
-              {currentView === 'dashboard' ? 'Dashboard' : 
-               currentView === 'orders' ? 'Quản Lý Đơn Hàng' : 
-               currentView === 'customers' ? 'Danh Sách Khách Hàng' : 'Cài Đặt'}
+            <h2 className="text-lg font-bold text-gray-800 hidden sm:block">
+              {currentView === 'dashboard' && 'Dashboard'}
+              {currentView === 'orders' && 'Quản Lý Đơn Hàng'}
+              {currentView === 'customers' && 'Danh Sách Khách Hàng'}
+              {currentView === 'settings' && 'Cài Đặt Hệ Thống'}
             </h2>
           </div>
 
           <div className="flex items-center gap-4">
-            {hasPermission('add_orders') && (
+            <button 
+              onClick={handleRefreshData}
+              className={`p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors relative ${isLoading ? 'animate-spin text-blue-500' : ''}`}
+              title="Làm mới dữ liệu"
+            >
+              <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white hidden"></div>
+              {isLoading ? <Loader2 size={20} /> : <Bell size={20} />}
+            </button>
+            
+            {/* Create Order Button */}
+            <button 
+              onClick={handleAddOrder}
+              className="hidden sm:flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-all shadow-sm font-medium"
+            >
+              <PlusCircle size={18} />
+              <span>Tạo Đơn Mới</span>
+            </button>
+            
+            {/* Create Order Icon (Mobile) */}
+            <button 
+              onClick={handleAddOrder}
+              className="sm:hidden flex items-center justify-center bg-red-600 text-white w-9 h-9 rounded-full shadow-sm"
+            >
+              <PlusCircle size={20} />
+            </button>
+
+            {/* Profile Dropdown or Login Button */}
+            {currentUser ? (
+              <div className="relative" ref={profileMenuRef}>
+                <button 
+                  onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                  className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-full hover:bg-gray-100 transition-colors border border-transparent hover:border-gray-200"
+                >
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-sm">
+                    {currentUser.fullName.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="hidden md:block text-left mr-1">
+                    <p className="text-sm font-bold text-gray-700 leading-none">{currentUser.fullName}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 capitalize">{currentUser.role}</p>
+                  </div>
+                </button>
+
+                {isProfileMenuOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-2 animate-fade-in z-50">
+                    <div className="px-4 py-2 border-b border-gray-100 md:hidden">
+                      <p className="text-sm font-bold text-gray-800">{currentUser.fullName}</p>
+                      <p className="text-xs text-gray-500 capitalize">{currentUser.role}</p>
+                    </div>
+                    <button 
+                      onClick={() => { setCurrentView('settings'); setIsProfileMenuOpen(false); }}
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <SettingsIcon size={16} /> Cài đặt tài khoản
+                    </button>
+                    <button 
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                    >
+                      <LogOut size={16} /> Đăng xuất
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
               <button 
-                onClick={handleAddOrder}
-                className="hidden sm:flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors shadow-sm text-sm font-medium"
+                onClick={() => setIsLoginModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors"
               >
-                <PlusCircle size={18} />
-                Tạo Đơn Mới
+                <LogIn size={18} />
+                <span className="hidden sm:inline">Đăng nhập</span>
               </button>
             )}
-            <div className="relative p-2 text-gray-500 hover:bg-gray-100 rounded-full cursor-pointer transition-colors">
-              <Bell size={20} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white"></span>
-            </div>
-            
-            {/* User Dropdown */}
-            <div className="relative" ref={profileMenuRef}>
-              <button 
-                onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                className="w-8 h-8 rounded-full bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 font-bold text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 cursor-pointer hover:bg-indigo-200 transition-colors"
-                title={currentUser.username}
-              >
-                {currentUser.username.substring(0, 2).toUpperCase()}
-              </button>
-
-              {isProfileMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 border border-gray-100 z-50 animate-fade-in origin-top-right">
-                  {(hasPermission('view_settings_personal') || hasPermission('view_settings_admin') || hasPermission('view_settings_roles')) && (
-                     <button
-                        onClick={() => {
-                           setCurrentView('settings');
-                           setIsProfileMenuOpen(false);
-                        }}
-                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                     >
-                        Cài đặt
-                     </button>
-                  )}
-                  <button
-                     onClick={() => {
-                        handleLogout();
-                        setIsProfileMenuOpen(false);
-                     }}
-                     className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium"
-                  >
-                     Đăng xuất
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
         </header>
 
-        {/* Content Area */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar relative">
-          {isLoading ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-80 z-50">
-              <div className="flex flex-col items-center gap-3">
-                <Loader2 className="animate-spin text-red-600" size={40} />
-                <p className="text-gray-500 font-medium">Đang tải dữ liệu từ Google Sheet...</p>
-              </div>
-            </div>
-          ) : (
-            <div className="max-w-7xl mx-auto h-full">
-              {currentView === 'dashboard' && hasPermission('view_dashboard') && <Dashboard orders={orders} />}
-              {currentView === 'orders' && hasPermission('view_orders') && (
-                <OrderList 
-                  orders={orders} 
-                  onEdit={handleEditOrder} 
-                  onDelete={handleDeleteOrder} 
-                  onStatusChange={handleStatusChange}
-                  onBulkUpdate={handleBulkUpdate}
-                  onBulkDelete={handleBulkDelete}
-                />
-              )}
-              {currentView === 'customers' && hasPermission('view_customers') && (
-                <div className="bg-white p-12 rounded-xl shadow-sm text-center border border-gray-200">
-                  <Users size={48} className="mx-auto text-gray-300 mb-4" />
-                  <h3 className="text-xl font-medium text-gray-600">Quản lý khách hàng</h3>
-                  <p className="text-gray-400 mt-2">Tính năng đang được phát triển...</p>
-                </div>
-              )}
-              {(currentView === 'settings') && 
-               (hasPermission('view_settings_personal') || hasPermission('view_settings_admin') || hasPermission('view_settings_roles')) && (
-                <Settings currentUser={currentUser} onUpdateCurrentUser={setCurrentUser} />
-              )}
-              
-              {/* Fallback Unauthorized */}
-              {((currentView === 'dashboard' && !hasPermission('view_dashboard')) ||
-                (currentView === 'orders' && !hasPermission('view_orders')) ||
-                (currentView === 'customers' && !hasPermission('view_customers')) ||
-                (currentView === 'settings' && !hasPermission('view_settings_personal') && !hasPermission('view_settings_admin') && !hasPermission('view_settings_roles'))) && (
-                 <div className="flex items-center justify-center h-full text-gray-500">
-                    Bạn không có quyền truy cập trang này.
-                 </div>
-              )}
+        {/* View Content */}
+        <div className="flex-1 overflow-hidden p-4 md:p-6 relative">
+          {currentView === 'dashboard' && <Dashboard orders={orders} />}
+          
+          {currentView === 'orders' && (
+            <OrderList 
+              orders={orders} 
+              onEdit={handleEditOrder} 
+              onDelete={handleDeleteOrder}
+              onStatusChange={handleStatusChange}
+              onBulkUpdate={handleBulkUpdate}
+              onBulkDelete={handleBulkDelete}
+              onRefresh={handleRefreshData}
+            />
+          )}
+
+          {currentView === 'customers' && (
+            <div className="flex flex-col items-center justify-center h-full text-gray-400 bg-white rounded-xl border border-dashed border-gray-300">
+              <Users size={48} className="mb-4 text-gray-300" />
+              <p className="text-lg font-medium">Quản lý khách hàng đang được phát triển</p>
             </div>
           )}
-        </main>
 
-        {/* Floating Action Button (Mobile) */}
-        {hasPermission('add_orders') && (
-          <button 
-            onClick={handleAddOrder}
-            className="md:hidden absolute bottom-6 right-6 w-14 h-14 bg-red-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-red-700 transition-colors z-30"
-          >
-            <PlusCircle size={28} />
-          </button>
-        )}
-      </div>
+          {currentView === 'settings' && currentUser && (
+            <Settings currentUser={currentUser} onUpdateCurrentUser={setCurrentUser} />
+          )}
+        </div>
+      </main>
 
+      {/* Modals */}
       <OrderModal 
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
         onSubmit={handleSubmitOrder}
         initialData={editingOrder}
         products={MOCK_PRODUCTS}

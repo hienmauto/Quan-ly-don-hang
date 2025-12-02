@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { Order, OrderStatus } from "../types";
 
@@ -80,7 +81,7 @@ export const extractOrderFromImage = async (base64Data: string, mimeType: string
             - platform: Phân tích logo hoặc thông tin trên phiếu gửi hàng để xác định nền tảng. CHỈ TRẢ VỀ MỘT TRONG CÁC GIÁ TRỊ SAU: "Shopee", "Lazada", "TikTok", "Zalo", "Facebook". Nếu không rõ, mặc định là "Shopee".
             - totalAmount: Tổng tiền thu (số nguyên).
             - createdAt: Ngày giờ đặt hàng theo định dạng "HH:mm dd-MM" (ví dụ: 10:22 01-12). Nếu không tìm thấy thông tin ngày giờ, hãy trả về một chuỗi trống.
-            - deliveryDeadline: Hạn giao hàng. Mặc định trả về "Trước 23h59p".
+            - deliveryDeadline: Hạn giao hàng. 
             - note: Phân tích bill, nếu thấy chữ "Hỏa tốc", "Express", "Gấp" thì trả về "Đơn hỏa tốc", ngược lại mặc định trả về "Đơn thường".
             - items: Mảng sản phẩm. { productName: "tên món", quantity: 1, price: 0 }.
             
@@ -113,6 +114,57 @@ export const extractOrderFromImage = async (base64Data: string, mimeType: string
 
     const jsonText = response.text || "{}";
     const result = JSON.parse(jsonText);
+
+    // --- Post Processing for Delivery Deadline ---
+    // Rule:
+    // If createdAt is Today -> deadline: "Trước 23h59p"
+    // If createdAt is Yesterday -> deadline: "Trước 11h59p"
+    // Else -> default to "Trước 23h59p"
+    
+    if (result.orders && Array.isArray(result.orders)) {
+        const now = new Date();
+        
+        // Helper to get "dd-MM" from a Date object
+        const getDayMonth = (d: Date) => {
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            return `${day}-${month}`;
+        }
+        
+        const todayStr = getDayMonth(now);
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const yesterdayStr = getDayMonth(yesterday);
+
+        result.orders.forEach((o: Partial<Order>) => {
+           // Default value
+           o.deliveryDeadline = 'Trước 23h59p';
+
+           if (o.createdAt) {
+               // The AI usually returns "HH:mm dd-MM" or just "dd-MM"
+               // We extract the "dd-MM" part.
+               let datePart = '';
+               const trimmed = o.createdAt.trim();
+               
+               if (trimmed.includes(' ')) {
+                   // e.g. "10:22 01-12" -> pop gives "01-12"
+                   datePart = trimmed.split(' ').pop() || '';
+               } else {
+                   datePart = trimmed;
+               }
+               
+               // Normalize potential slashes to hyphens just in case
+               datePart = datePart.replace(/\//g, '-');
+               
+               if (datePart === todayStr) {
+                   o.deliveryDeadline = 'Trước 23h59p';
+               } else if (datePart === yesterdayStr) {
+                   o.deliveryDeadline = 'Trước 11h59p';
+               }
+           }
+        });
+    }
+
     return result.orders || [];
   } catch (error) {
     console.error("Error extracting order from image:", error);

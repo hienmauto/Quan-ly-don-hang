@@ -1,29 +1,10 @@
+
 import { User, Permission } from '../types';
+import { getDecodedAdmin } from '../data/secureStore';
 
 const USERS_KEY = 'app_users';
 const CURRENT_USER_KEY = 'app_current_user';
 const ROLES_KEY = 'app_roles';
-
-const ADMIN_USER: User = {
-  username: 'admin',
-  password: 'Hienmauto@479',
-  fullName: 'Hien M Auto',
-  email: 'hienmauto@gmail.com',
-  phone: '0904444037',
-  role: 'admin',
-  permissions: [
-    'view_dashboard',
-    'view_orders',
-    'add_orders',
-    'edit_orders',
-    'delete_orders',
-    'view_customers',
-    'view_settings_personal',
-    'view_settings_admin',
-    'view_settings_roles'
-  ],
-  isActive: true
-};
 
 const isBrowser = () => typeof window !== 'undefined' && window.localStorage;
 
@@ -44,20 +25,25 @@ export const checkPasswordComplexity = (password: string): { valid: boolean; mes
 
 const initializeUsers = () => {
   if (isBrowser()) {
+    const adminUser = getDecodedAdmin();
     const usersJson = localStorage.getItem(USERS_KEY);
+    
     if (!usersJson) {
-      localStorage.setItem(USERS_KEY, JSON.stringify([ADMIN_USER]));
+      localStorage.setItem(USERS_KEY, JSON.stringify([adminUser]));
     } else {
       const users: User[] = JSON.parse(usersJson);
-      const adminIndex = users.findIndex(u => u.username === 'admin');
+      const adminIndex = users.findIndex(u => u.username === adminUser.username);
+      
       if (adminIndex === -1) {
-        users.push(ADMIN_USER);
+        users.push(adminUser);
       } else {
+        // Cập nhật lại thông tin Admin gốc để đảm bảo quyền hạn luôn đúng khi code thay đổi
         users[adminIndex] = {
           ...users[adminIndex],
-          password: ADMIN_USER.password,
-          email: ADMIN_USER.email,
-          permissions: ADMIN_USER.permissions
+          // Giữ lại password nếu người dùng đã đổi, hoặc reset về mặc định nếu cần thiết
+          // Ở đây ta ưu tiên cập nhật permissions mới từ code
+          permissions: adminUser.permissions,
+          role: adminUser.role
         };
       }
       localStorage.setItem(USERS_KEY, JSON.stringify(users));
@@ -77,7 +63,7 @@ const initializeRoles = () => {
 
 export const login = async (username: string, password: string, remember: boolean): Promise<User | null> => {
   if (isBrowser()) {
-    initializeUsers();
+    initializeUsers(); // Đảm bảo DB local có dữ liệu
     initializeRoles();
     const users: User[] = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
     const user = users.find(u => u.username === username && u.password === password);
@@ -215,7 +201,8 @@ export const updateUser = (username: string, updates: Partial<User>): { success:
 
 export const deleteUser = (username: string): { success: boolean, message: string } => {
   if (isBrowser()) {
-    if (username === 'admin') return { success: false, message: 'Không thể xóa Super Admin' };
+    const adminUser = getDecodedAdmin();
+    if (username === adminUser.username) return { success: false, message: 'Không thể xóa Super Admin' };
     let users: User[] = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
     users = users.filter(u => u.username !== username);
     localStorage.setItem(USERS_KEY, JSON.stringify(users));
