@@ -1,3 +1,4 @@
+
 import { Order, OrderStatus, OrderItem } from '../types';
 
 const SHEET_ID = '1HARjln1eTmMPJo1WX6n0KHX-UtLst0PPB8LgBy4-5CQ';
@@ -379,7 +380,9 @@ const parseTascoCSV = (text: string): any[] => {
     const row = parseRow(rowStr);
     
     // Mapping Columns for Tasco:
-    // A: ID, B: Name, C: Category, D: ParentId, E: Description, F: LogoUrl, G: Code, H: Status, I: CreatedAt
+    // A: ID, B: Name, C: Category, D: ParentId, E: Description, F: LogoUrl, G: Code, H: Status, I: CreatedAt, J: SortOrder
+    const sortOrderRaw = row[9];
+
     items.push({
       id: row[0] || `T${i}`,
       rowIndex: i + 1,
@@ -390,11 +393,13 @@ const parseTascoCSV = (text: string): any[] => {
       logoUrl: row[5] || '',
       code: row[6] || '',
       status: (row[7] || 'Active') as 'Active' | 'Inactive',
-      createdAt: row[8] || getLocalTodayStr()
+      createdAt: row[8] || getLocalTodayStr(),
+      sortOrder: sortOrderRaw ? parseInt(sortOrderRaw) : 0
     });
   }
-  // Reverse to show newest first
-  return items.reverse();
+  // Reverse to show newest first? NO, let's respect sortOrder if exists, otherwise reverse
+  // Since we are adding manual sorting, we should just return items and let the component sort.
+  return items; 
 };
 
 const mapTascoToSheetRow = (item: any) => {
@@ -407,7 +412,8 @@ const mapTascoToSheetRow = (item: any) => {
     item.logoUrl || '',
     item.code || '',
     item.status || 'Active',
-    item.createdAt || getLocalTodayStr()
+    item.createdAt || getLocalTodayStr(),
+    item.sortOrder || 0
   ];
 };
 
@@ -475,6 +481,34 @@ export const updateTascoItemInSheet = async (item: any): Promise<boolean> => {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
     });
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+};
+
+export const updateBatchTascoItemsInSheet = async (items: any[]): Promise<boolean> => {
+  try {
+    const updates = items.map(item => ({
+      id: item.rowIndex,
+      data: mapTascoToSheetRow(item)
+    }));
+
+    const payload = { 
+      action: 'updateBatch', 
+      sheetName: TASCO_SHEET_NAME, 
+      spreadsheetId: TASCO_SHEET_ID, 
+      data: updates
+    };
+
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+    });
+
     return true;
   } catch (e) {
     console.error(e);

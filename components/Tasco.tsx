@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Printer, Plus, Edit2, Trash2, Save, X, Search, 
   ChevronRight, ChevronDown, Check, Loader2, Image as ImageIcon,
-  RotateCcw, Settings, List, Layers, Square, CheckSquare
+  RotateCcw, Settings, List, Layers, Square, CheckSquare, GripVertical
 } from 'lucide-react';
 import { User, Permission } from '../types';
 import { 
@@ -11,6 +11,7 @@ import {
   addTascoItemToSheet, 
   addBatchTascoItemsToSheet,
   updateTascoItemInSheet, 
+  updateBatchTascoItemsInSheet,
   deleteTascoItemFromSheet 
 } from '../services/sheetService';
 
@@ -25,6 +26,7 @@ interface TascoItem {
   code?: string;
   status: 'Active' | 'Inactive';
   createdAt?: string;
+  sortOrder?: number;
 }
 
 interface TascoProps {
@@ -44,6 +46,7 @@ const Tasco: React.FC<TascoProps> = ({ currentUser }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [viewMode, setViewMode] = useState<'print' | 'manage'>('print');
+  const [hasOrderChanged, setHasOrderChanged] = useState(false);
   
   // Print Selection State
   const [selectedBrandId, setSelectedBrandId] = useState<string>('');
@@ -75,7 +78,12 @@ const Tasco: React.FC<TascoProps> = ({ currentUser }) => {
   const loadData = async () => {
     setIsLoading(true);
     const data = await fetchTascoFromSheet();
-    setItems(data);
+    // Sort items by sortOrder ascending, fallback to reverse id or createdAt logic if needed
+    // Assuming newer items have 0 sortOrder initially, they might appear at top or bottom depending on stable sort.
+    // Let's sort strictly by sortOrder. Items with 0 or undefined sortOrder should probably come last or first?
+    // Let's assume 0 is default.
+    const sorted = data.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    setItems(sorted);
     setIsLoading(false);
   };
 
@@ -174,6 +182,7 @@ const Tasco: React.FC<TascoProps> = ({ currentUser }) => {
                  padding: 5mm; 
                  display: flex;
                  flex-direction: column;
+                 justify-content: space-evenly;
               }
               /* Utility classes replication */
               .flex { display: flex; }
@@ -181,6 +190,7 @@ const Tasco: React.FC<TascoProps> = ({ currentUser }) => {
               .items-center { align-items: center; }
               .justify-center { justify-content: center; }
               .justify-between { justify-content: space-between; }
+              .justify-evenly { justify-content: space-evenly; }
               .w-full { width: 100%; }
               .h-full { height: 100%; }
               .flex-1 { flex: 1 1 0%; }
@@ -318,7 +328,8 @@ const Tasco: React.FC<TascoProps> = ({ currentUser }) => {
       logoUrl: row.logoUrl || '',
       code: row.code || '',
       status: 'Active' as const,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      sortOrder: items.length + idx // Append to end
     }));
 
     const success = await addBatchTascoItemsToSheet(newItems);
@@ -359,6 +370,78 @@ const Tasco: React.FC<TascoProps> = ({ currentUser }) => {
        await loadData();
      } else {
        alert('Có lỗi xảy ra khi xóa');
+     }
+     setIsSaving(false);
+  };
+
+  // --- DRAG AND DROP HANDLERS ---
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.setData('text/plain', index.toString());
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    const dragIndexStr = e.dataTransfer.getData('text/plain');
+    if (!dragIndexStr) return;
+    
+    const dragIndex = parseInt(dragIndexStr);
+    if (dragIndex === dropIndex) return;
+
+    // We can only sort if there's no search filter active, otherwise indices are messy
+    if (manageSearch.trim() !== '') {
+       alert("Vui lòng tắt tìm kiếm trước khi sắp xếp.");
+       return;
+    }
+
+    // Get the subset of items being viewed (Filtered by Category)
+    const currentCategoryItems = items.filter(i => i.category === manageCategory);
+    
+    // Copy to mutate
+    const newCategoryItems = [...currentCategoryItems];
+    
+    // Move item
+    const [movedItem] = newCategoryItems.splice(dragIndex, 1);
+    newCategoryItems.splice(dropIndex, 0, movedItem);
+
+    // Re-assign sortOrder based on new index in this category list
+    // We preserve the relative order. 
+    // Optimization: Just update sortOrder for all items in this category to be their index + base offset?
+    // Or just 0 to N.
+    const updatedCategoryItems = newCategoryItems.map((item, idx) => ({
+        ...item,
+        sortOrder: idx
+    }));
+
+    // Reconstruct full items list
+    const otherItems = items.filter(i => i.category !== manageCategory);
+    
+    // Combine and Sort purely by updated logic for display
+    const newAllItems = [...otherItems, ...updatedCategoryItems].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+    setItems(newAllItems);
+    setHasOrderChanged(true);
+  };
+
+  const handleSaveOrder = async () => {
+     setIsSaving(true);
+     // Filter items that belong to current category (since we reordered them)
+     const itemsToUpdate = items.filter(i => i.category === manageCategory);
+     
+     // Only send update if we have rowIndexes
+     const validItems = itemsToUpdate.filter(i => i.rowIndex !== undefined);
+
+     const success = await updateBatchTascoItemsInSheet(validItems);
+     if (success) {
+        setHasOrderChanged(false);
+        alert('Đã lưu thứ tự sắp xếp thành công!');
+     } else {
+        alert('Lỗi khi lưu thứ tự.');
      }
      setIsSaving(false);
   };
@@ -532,10 +615,10 @@ const Tasco: React.FC<TascoProps> = ({ currentUser }) => {
                      position: 'relative'
                    }}
                  >
-                    {/* Inner content wrapper */}
-                    <div ref={previewRef} className="flex flex-col h-full w-full">
+                    {/* Inner content wrapper - Updated layout */}
+                    <div ref={previewRef} className="flex flex-col h-full w-full justify-between">
                         {/* Header */}
-                        <div className="flex flex-col items-center w-full mb-1 shrink-0">
+                        <div className="flex flex-col items-center w-full shrink-0">
                             <div className="flex items-center justify-center mb-1 shrink-0 mx-auto" style={{ width: '100%', height: '60px' }}>
                               {selectedBrandLogo ? (
                                 <img src={selectedBrandLogo} alt={selectedBrandName} className="object-contain h-full" crossOrigin="anonymous" />
@@ -550,8 +633,8 @@ const Tasco: React.FC<TascoProps> = ({ currentUser }) => {
                             </div>
                         </div>
 
-                        {/* Body - Centered Table */}
-                        <div className="w-full flex-1 flex flex-col justify-center items-center">
+                        {/* Body - Centered Table with spacing */}
+                        <div className="w-full flex flex-col justify-center items-center flex-1">
                            <table className="text-[20px] leading-snug border-collapse" style={{color: '#000000', width: 'auto'}}>
                               <tbody>
                                  <tr>
@@ -626,6 +709,15 @@ const Tasco: React.FC<TascoProps> = ({ currentUser }) => {
                     />
                  </div>
 
+                 {hasOrderChanged && !manageSearch && (
+                   <button 
+                     onClick={handleSaveOrder}
+                     className="px-4 py-2 bg-green-600 text-white rounded-lg font-bold flex items-center gap-2 hover:bg-green-700 animate-pulse"
+                   >
+                     {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />} Lưu Thứ Tự
+                   </button>
+                 )}
+
                  {canAdd && (
                    <button 
                      onClick={handleOpenAddModal}
@@ -638,8 +730,9 @@ const Tasco: React.FC<TascoProps> = ({ currentUser }) => {
 
               <div className="flex-1 overflow-auto border border-gray-200 rounded-lg">
                  <table className="w-full text-left border-collapse">
-                    <thead className="bg-gray-50 text-xs font-bold text-gray-500 uppercase sticky top-0">
+                    <thead className="bg-gray-50 text-xs font-bold text-gray-500 uppercase sticky top-0 z-10">
                        <tr>
+                          <th className="p-4 border-b w-12"></th>
                           <th className="p-4 border-b">Tên</th>
                           {(manageCategory === 'MODEL' || manageCategory === 'COLOR') && <th className="p-4 border-b">Mã (Code)</th>}
                           {manageCategory === 'BRAND' && <th className="p-4 border-b">Logo</th>}
@@ -650,8 +743,18 @@ const Tasco: React.FC<TascoProps> = ({ currentUser }) => {
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-sm">
-                       {filteredManageItems.length > 0 ? filteredManageItems.map(item => (
-                          <tr key={item.id} className="hover:bg-gray-50">
+                       {filteredManageItems.length > 0 ? filteredManageItems.map((item, idx) => (
+                          <tr 
+                            key={item.id} 
+                            className={`hover:bg-gray-50 ${!manageSearch ? 'cursor-move' : ''}`}
+                            draggable={!manageSearch}
+                            onDragStart={(e) => handleDragStart(e, idx)}
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDrop(e, idx)}
+                          >
+                             <td className="p-4 text-gray-400">
+                                {!manageSearch && <GripVertical size={16} />}
+                             </td>
                              <td className="p-4 font-medium text-gray-800">{item.name}</td>
                              {(manageCategory === 'MODEL' || manageCategory === 'COLOR') && <td className="p-4 text-gray-600 font-mono">{item.code || '---'}</td>}
                              {manageCategory === 'BRAND' && (
@@ -685,7 +788,7 @@ const Tasco: React.FC<TascoProps> = ({ currentUser }) => {
                              </td>
                           </tr>
                        )) : (
-                          <tr><td colSpan={6} className="p-8 text-center text-gray-500">Không có dữ liệu</td></tr>
+                          <tr><td colSpan={8} className="p-8 text-center text-gray-500">Không có dữ liệu</td></tr>
                        )}
                     </tbody>
                  </table>
