@@ -1,24 +1,26 @@
 
 import { User, Permission } from '../types';
 import { DEFAULT_ADMIN } from '../data/userRepository';
+import { parseRow } from './sheetService';
 
-// --- N8N WEBHOOK CONFIGURATION ---
-const N8N_URLS = {
-  GET_USERS: 'https://n8n.hienmauto.com/webhook/user-info',
-  ADD_USER: 'https://n8n.hienmauto.com/webhook/add-user',
-  UPDATE_USER: 'https://n8n.hienmauto.com/webhook/update-user',
-  DELETE_USER: 'https://n8n.hienmauto.com/webhook/delete-user'
-};
+// --- GOOGLE SHEET CONFIGURATION ---
+const USERS_SHEET_ID = '1cXOlmZwO-6pXU9Wx0Y7hIU7ehEEl9-c4UtZe35Mpy3o';
+// CẬP NHẬT: Tên sheet là "Users" dựa trên screenshot
+const USERS_SHEET_NAME = 'Users'; 
+const USERS_CSV_URL = `https://docs.google.com/spreadsheets/d/${USERS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(USERS_SHEET_NAME)}`;
+
+// URL Script dành riêng cho quản lý tài khoản (Google Sheet User)
+// CẬP NHẬT: URL Script mới nhất
+const USER_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyhBmdbpFxMiiZWEti9rbiyxRDqRDaLj2h6h-Aaly53WIcWngzbvBApo1UCbIw_rmKHyA/exec';
 
 const CURRENT_USER_KEY = 'app_current_user';
+const ROLES_KEY = 'app_roles';
 
 // Hàm kiểm tra độ mạnh mật khẩu
 export const checkPasswordComplexity = (password: string): { valid: boolean; message?: string } => {
   if (password.length < 6) return { valid: false, message: 'Mật khẩu phải có ít nhất 6 ký tự.' };
   return { valid: true };
 };
-
-// --- API CALLS TO N8N ---
 
 // Helper function to robustly parse permissions
 const parsePermissions = (raw: any): Permission[] => {
@@ -27,9 +29,13 @@ const parsePermissions = (raw: any): Permission[] => {
 
   if (typeof raw === 'string') {
     let cleaned = raw.trim();
+    // Handle both [] format and just comma separated
     cleaned = cleaned.replace(/^\[|\]$/g, '');
     if (!cleaned) return [];
+    
+    // Split by comma, then remove quotes
     return cleaned.split(',').map(item => {
+      // Remove ' or " and whitespace
       return item.trim().replace(/^['"]|['"]$/g, ''); 
     }).filter(Boolean) as Permission[];
   }
@@ -37,41 +43,84 @@ const parsePermissions = (raw: any): Permission[] => {
   return [];
 };
 
-// Helper để map dữ liệu từ Sheet (thường viết Hoa) sang Code (viết thường)
-const mapSheetUserToAppUser = (data: any): User => {
-  const rawPermissions = data.Permissions || data.permissions;
+// Parsing CSV data to User objects
+const parseUserCSV = (text: string): User[] => {
+  const rows = text.split('\n');
+  if (rows.length < 2) return [];
 
-  return {
-    username: data.Username || data.username,
-    password: data.Password || data.password,
-    fullName: data.FullName || data.fullName || data.fullname,
-    email: data.Email || data.email,
-    phone: data.Phone || data.phone,
-    role: (data.Role || data.role || 'user').toLowerCase(),
-    permissions: parsePermissions(rawPermissions),
-    isActive: data.IsActive === true || data.IsActive === 'TRUE' || data.isActive === true
-  };
+  const users: User[] = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const rowStr = rows[i].trim();
+    if (!rowStr) continue;
+    
+    const row = parseRow(rowStr);
+    
+    // Column Mapping:
+    // A: Username, B: Password, C: FullName, D: Email, E: Phone, F: Role, G: Permissions, H: IsActive
+    
+    const username = row[0];
+    const password = row[1];
+    const fullName = row[2];
+    const email = row[3];
+    const phone = row[4];
+    const role = row[5];
+    const permissionsRaw = row[6];
+    const isActiveRaw = row[7];
+
+    if (!username) continue; // Skip empty rows
+
+    users.push({
+      username: username,
+      password: password,
+      fullName: fullName,
+      email: email,
+      phone: phone,
+      role: role || 'user',
+      permissions: parsePermissions(permissionsRaw),
+      isActive: isActiveRaw === 'TRUE' || isActiveRaw === 'true',
+      rowIndex: i + 1 // Google Sheets 1-based index (Header is 1, Data starts 2)
+    });
+  }
+  return users;
+};
+
+const mapUserToSheetRow = (user: User) => {
+  // Serialize permissions array to string format: ['perm1', 'perm2']
+  const permString = user.permissions.length > 0 
+    ? `['${user.permissions.join("', '")}']` 
+    : '[]';
+
+  return [
+    user.username,
+    user.password || '',
+    user.fullName,
+    user.email,
+    user.phone,
+    user.role,
+    permString,
+    user.isActive ? 'TRUE' : 'FALSE'
+  ];
 };
 
 export const getAllUsers = async (): Promise<User[]> => {
   let sheetUsers: User[] = [];
   try {
-    const response = await fetch(N8N_URLS.GET_USERS);
+    const response = await fetch(USERS_CSV_URL);
     if (response.ok) {
-      const json = await response.json();
-      const rawData = Array.isArray(json) ? json : (json.data || []);
-      sheetUsers = rawData.map(mapSheetUserToAppUser);
+      const text = await response.text();
+      sheetUsers = parseUserCSV(text);
     } else {
-      console.error('Không thể tải danh sách người dùng từ N8N');
+      console.error('Không thể tải danh sách người dùng từ Google Sheet');
     }
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách user từ n8n:', error);
+    console.error('Lỗi khi lấy danh sách user:', error);
   }
 
-  // Lọc bỏ nếu file Sheet lỡ có dòng trùng tên với Admin gốc
+  // Filter out admin from sheet to avoid duplication if it exists in sheet
   const filteredSheetUsers = sheetUsers.filter(u => u.username !== DEFAULT_ADMIN.username);
 
-  // Luôn trả về Admin gốc + Users từ Sheet
+  // Return Default Admin + Sheet Users
   return [DEFAULT_ADMIN, ...filteredSheetUsers];
 };
 
@@ -104,15 +153,16 @@ export const logout = () => {
 };
 
 export const getCurrentUser = (): User | null => {
-  if (typeof window === 'undefined') return null;
-  const userLocal = localStorage.getItem(CURRENT_USER_KEY);
-  const userSession = sessionStorage.getItem(CURRENT_USER_KEY);
-  const userJson = userLocal || userSession;
-  return userJson ? JSON.parse(userJson) : null;
+  if (typeof window !== 'undefined') {
+    const userLocal = localStorage.getItem(CURRENT_USER_KEY);
+    const userSession = sessionStorage.getItem(CURRENT_USER_KEY);
+    const userJson = userLocal || userSession;
+    return userJson ? JSON.parse(userJson) : null;
+  }
+  return null;
 };
 
 // --- ROLE MANAGEMENT ---
-const ROLES_KEY = 'app_roles';
 export const getRoles = (): string[] => {
   const defaultRoles = ['admin', 'user'];
   if (typeof window === 'undefined') return defaultRoles;
@@ -139,11 +189,10 @@ export const deleteRole = (roleName: string): { success: boolean, message: strin
   return { success: true, message: 'Xóa vai trò thành công' };
 };
 
-// --- CRUD OPERATIONS VIA N8N ---
+// --- CRUD OPERATIONS VIA GOOGLE APPS SCRIPT ---
 
 export const addUser = async (newUser: User): Promise<{ success: boolean, message: string }> => {
   try {
-    // Không cho phép tạo thêm user trùng tên admin gốc
     if (newUser.username === DEFAULT_ADMIN.username) {
         return { success: false, message: 'Tên đăng nhập này đã được sử dụng bởi hệ thống.' };
     }
@@ -153,140 +202,114 @@ export const addUser = async (newUser: User): Promise<{ success: boolean, messag
       return { success: false, message: 'Tên đăng nhập đã tồn tại!' };
     }
 
-    // Format permissions manually to match the requested format "['perm1', 'perm2']"
-    let formattedPermissions = "[]";
-    if (newUser.permissions && newUser.permissions.length > 0) {
-       formattedPermissions = "[" + newUser.permissions.map(p => `'${p}'`).join(", ") + "]";
-    }
-
+    const rowData = mapUserToSheetRow(newUser);
+    
     const payload = {
-      Username: newUser.username,
-      Password: newUser.password,
-      FullName: newUser.fullName,
-      Email: newUser.email,
-      Phone: Number(newUser.phone) || 0, // Ensure phone is a number
-      Role: newUser.role,
-      Permissions: formattedPermissions,
-      IsActive: true
+      action: 'add',
+      data: [rowData],
+      spreadsheetId: USERS_SHEET_ID,
+      sheetName: USERS_SHEET_NAME
     };
 
-    // Send array of objects
-    const response = await fetch(N8N_URLS.ADD_USER, {
+    console.log("Sending payload to GAS:", payload);
+
+    await fetch(USER_SCRIPT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify([payload]) 
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload) 
     });
 
-    if (response.ok) {
-      return { success: true, message: 'Thêm tài khoản thành công' };
-    } else {
-      return { success: false, message: 'Lỗi server n8n' };
-    }
+    return { success: true, message: 'Thêm tài khoản thành công (Dữ liệu sẽ cập nhật sau vài giây)' };
   } catch (error) {
     return { success: false, message: 'Lỗi kết nối: ' + error };
   }
 };
 
 export const updateUser = async (username: string, updates: Partial<User>): Promise<{ success: boolean, message: string }> => {
-  // BẢO VỆ ADMIN: Không cho phép sửa admin gốc qua API N8N
   if (username === DEFAULT_ADMIN.username) {
     return { success: false, message: 'Tài khoản Admin gốc được quản lý trong mã nguồn, không thể chỉnh sửa tại đây.' };
   }
 
   try {
-    // 1. Fetch current user data to ensure we have a complete object
+    // 1. Fetch current data to find rowIndex and merge data
     const allUsers = await getAllUsers();
     const currentUser = allUsers.find(u => u.username === username);
     
     if (!currentUser) {
        return { success: false, message: 'Người dùng không tồn tại' };
     }
+    
+    if (!currentUser.rowIndex) {
+      return { success: false, message: 'Không tìm thấy chỉ mục dòng của người dùng' };
+    }
 
-    // 2. Merge updates into current user
+    // 2. Merge updates
     const mergedUser = { ...currentUser, ...updates };
 
-    // 3. Format permissions as stringified array
-    let formattedPermissions = "[]";
-    if (mergedUser.permissions && mergedUser.permissions.length > 0) {
-       formattedPermissions = "[" + mergedUser.permissions.map(p => `'${p}'`).join(", ") + "]";
-    }
+    // 3. Map to row format
+    const rowData = mapUserToSheetRow(mergedUser);
 
-    // 4. Construct payload with strictly defined keys
-    const payload: any = {
-      Username: mergedUser.username,
-      FullName: mergedUser.fullName,
-      Email: mergedUser.email,
-      Phone: mergedUser.phone,
-      Role: mergedUser.role,
-      Permissions: formattedPermissions
+    // 4. Send updateBatch action
+    const payload = {
+      action: 'updateBatch',
+      data: [{ id: currentUser.rowIndex, data: rowData }],
+      spreadsheetId: USERS_SHEET_ID,
+      sheetName: USERS_SHEET_NAME
     };
 
-    // If password is updated, include it. N8N might not need it for all updates, but it's part of the object.
-    if (updates.password) {
-        payload.Password = updates.password;
-    }
-    
-    // N8N often expects an array of objects
-    const bodyPayload = [payload];
-
-    console.log('Sending update payload to N8N:', bodyPayload);
-
-    const response = await fetch(N8N_URLS.UPDATE_USER, {
+    await fetch(USER_SCRIPT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyPayload)
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
     });
 
-    if (response.ok) {
-      // Update local storage if updating the currently logged-in user
-      const loggedInUser = getCurrentUser();
-      if (loggedInUser && loggedInUser.username === username) {
-         const { password, ...safeData } = { ...loggedInUser, ...updates };
-         localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(safeData));
-      }
-      return { success: true, message: 'Cập nhật thành công' };
-    } else {
-      return { success: false, message: 'Lỗi server n8n' };
+    // Update local storage if current user
+    const loggedInUser = getCurrentUser();
+    if (loggedInUser && loggedInUser.username === username) {
+        const { password, ...safeData } = { ...loggedInUser, ...updates };
+        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(safeData));
     }
+
+    return { success: true, message: 'Cập nhật thành công' };
   } catch (error) {
     return { success: false, message: 'Lỗi kết nối: ' + error };
   }
 };
 
 export const deleteUser = async (user: User): Promise<{ success: boolean, message: string }> => {
-  // BẢO VỆ ADMIN: Không cho phép xóa admin gốc
   if (user.username === DEFAULT_ADMIN.username) {
     return { success: false, message: 'Không thể xóa tài khoản Admin gốc của hệ thống.' };
   }
 
   try {
-    // Format permissions exactly like in add/update
-    let formattedPermissions = "[]";
-    if (user.permissions && user.permissions.length > 0) {
-       formattedPermissions = "[" + user.permissions.map(p => `'${p}'`).join(", ") + "]";
+    let rowIndex = user.rowIndex;
+    if (!rowIndex) {
+       const allUsers = await getAllUsers();
+       const freshUser = allUsers.find(u => u.username === user.username);
+       if (freshUser) rowIndex = freshUser.rowIndex;
     }
 
-    // Construct full payload as requested
+    if (!rowIndex) {
+       return { success: false, message: 'Không tìm thấy dòng dữ liệu để xóa.' };
+    }
+
     const payload = {
-      Username: user.username,
-      FullName: user.fullName,
-      Email: user.email,
-      Phone: Number(user.phone) || 0,
-      Role: user.role,
-      Permissions: formattedPermissions,
-      IsActive: user.isActive
+      action: 'delete',
+      id: rowIndex,
+      spreadsheetId: USERS_SHEET_ID,
+      sheetName: USERS_SHEET_NAME
     };
 
-    const response = await fetch(N8N_URLS.DELETE_USER, {
+    await fetch(USER_SCRIPT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify([payload]) // Wrap in array
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
     });
 
-    if (response.ok) {
-      return { success: true, message: 'Xóa tài khoản thành công' };
-    }
-    return { success: false, message: 'Lỗi server n8n' };
+    return { success: true, message: 'Xóa tài khoản thành công' };
   } catch (error) {
     return { success: false, message: 'Lỗi kết nối: ' + error };
   }

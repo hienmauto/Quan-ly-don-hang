@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -27,39 +28,51 @@ const Dashboard: React.FC<DashboardProps> = ({ orders }) => {
   });
 
   // --- Date Parsing Helper ---
-  // Supported formats: "HH:mm dd-MM", "dd-MM", "HH:mm dd/MM", "dd/MM"
+  // Improved to handle formats: "HH:mm dd-MM", "dd/MM/yyyy", "dd-MM"
   const parseDate = (dateStr: string): Date | null => {
     if (!dateStr || typeof dateStr !== 'string') return null;
     const now = new Date();
     const currentYear = now.getFullYear();
-
-    // Clean up string (trim extra spaces)
     const cleanStr = dateStr.trim();
-    
-    // Handle format "HH:mm dd-MM" or "dd-MM"
-    // Regex to capture day and month
-    const match = cleanStr.match(/(\d{1,2})[-/](\d{1,2})/);
-    
-    if (match) {
-        const day = parseInt(match[1], 10);
-        const month = parseInt(match[2], 10);
 
-        if (!day || !month) return null;
-
-        // Logic to determine Year:
-        // We assume data is mostly current.
-        // If we are in January (Month 0) and we see data for December (Month 12), it's likely last year.
+    // 1. Try format "HH:mm dd-MM" (App generated format)
+    // Regex: HH:mm followed by space then dd-MM or dd/MM
+    const timeDateMatch = cleanStr.match(/(\d{1,2}):(\d{1,2})\s+(\d{1,2})[-/](\d{1,2})/);
+    if (timeDateMatch) {
+        const day = parseInt(timeDateMatch[3], 10);
+        const month = parseInt(timeDateMatch[4], 10);
+        // Default to current year, handle year boundary (Dec -> Jan)
         let year = currentYear;
-        if (now.getMonth() === 0 && month === 12) {
-             year = currentYear - 1;
-        }
-        // Conversely, if we are in Dec and see Jan data (unlikely for past data, but possible for future), keep current or handle appropriately.
-        // For simple "Total Month" logic, usually we care about the strict month index match.
+        if (now.getMonth() === 0 && month === 12) year = currentYear - 1;
+        
+        if (day && month) return new Date(year, month - 1, day);
+    }
 
-        return new Date(year, month - 1, day);
+    // 2. Try full date "dd/MM/yyyy" or "dd-MM-yyyy"
+    const fullDateMatch = cleanStr.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (fullDateMatch) {
+         const day = parseInt(fullDateMatch[1], 10);
+         const month = parseInt(fullDateMatch[2], 10);
+         const year = parseInt(fullDateMatch[3], 10);
+         if (day && month && year) return new Date(year, month - 1, day);
+    }
+
+    // 3. Try short date "dd-MM" or "dd/MM"
+    const shortDateMatch = cleanStr.match(/(\d{1,2})[-/](\d{1,2})/);
+    if (shortDateMatch) {
+        const day = parseInt(shortDateMatch[1], 10);
+        const month = parseInt(shortDateMatch[2], 10);
+        
+        // Safety check to ensure we didn't match something like "2024-02" where 2024 is > 31
+        if (day > 31) return null;
+
+        let year = currentYear;
+        if (now.getMonth() === 0 && month === 12) year = currentYear - 1;
+
+        if (day && month) return new Date(year, month - 1, day);
     }
     
-    // Fallback for standard ISO string
+    // 4. Fallback for standard ISO string or other formats
     const d = new Date(cleanStr);
     if (!isNaN(d.getTime())) return d;
     
@@ -98,7 +111,7 @@ const Dashboard: React.FC<DashboardProps> = ({ orders }) => {
           
           const status = (o.status || '').toLowerCase();
 
-          // Today (Reset every 24h because todayDate changes tomorrow)
+          // Today (Check Year, Month, Date)
           if (dYear === currentYear && dMonth === currentMonth && dDate === todayDate) {
               cardTotalToday++;
           } 

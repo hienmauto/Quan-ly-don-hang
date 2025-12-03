@@ -1,12 +1,16 @@
-
 import { Order, OrderStatus, OrderItem } from '../types';
 
 const SHEET_ID = '1HARjln1eTmMPJo1WX6n0KHX-UtLst0PPB8LgBy4-5CQ';
 const SHEET_GID = '1857148256';
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${SHEET_GID}`;
 
-// URL Script
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzH2tLqGf2hTfC2wS4XyJ1yR7x8j3gK6l5n9oP0q1r2s3t4u5v6/exec'; 
+// --- CONFIG CHO TASCO SHEET ---
+const TASCO_SHEET_ID = '17ViwoLY03r7HzopWidYzR1Fl02EYq8Bx2fggaivpkhc';
+const TASCO_SHEET_NAME = 'Trang tính1'; // Cập nhật tên sheet chính xác từ screenshot
+const TASCO_CSV_URL = `https://docs.google.com/spreadsheets/d/${TASCO_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(TASCO_SHEET_NAME)}`;
+
+// URL Script - Đã cập nhật
+export const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby_kglUd-3CViKNSoARFydIuJ1lW0SGNI0NjkvkBc9K4AXYVEWcM5N5lm2oil36xLmLkQ/exec'; 
 
 // N8N Webhook URLs
 const N8N_ADD_WEBHOOK_URL = 'https://n8n.hienmauto.com/webhook/quan-ly-don-hang/them-don';
@@ -15,13 +19,14 @@ const N8N_UPDATE_BULK_WEBHOOK_URL = 'https://n8n.hienmauto.com/webhook/quan-ly-d
 const N8N_DELETE_WEBHOOK_URL = 'https://n8n.hienmauto.com/webhook/quan-ly-don-hang/xoa-don';
 const N8N_STATS_WEBHOOK_URL = 'https://n8n.hienmauto.com/webhook/quan-ly-don-hang/don-da-gui';
 
+// --- ORDERS FUNCTIONS ---
+
 export const fetchOrdersFromSheet = async (): Promise<Order[]> => {
   try {
     const response = await fetch(CSV_URL);
     if (!response.ok) throw new Error('Failed to fetch sheet');
     const text = await response.text();
     const orders = parseCSV(text);
-    // Return all orders (reversed to show newest first)
     return orders.reverse();
   } catch (error) {
     console.error('Error fetching sheet:', error);
@@ -29,17 +34,14 @@ export const fetchOrdersFromSheet = async (): Promise<Order[]> => {
   }
 };
 
-// Hàm lấy dữ liệu thống kê từ N8N (Đơn đã gửi/Hoàn thành/Trả hàng...)
 export const fetchN8NStatsData = async (): Promise<any[]> => {
   try {
     const response = await fetch(N8N_STATS_WEBHOOK_URL);
     if (!response.ok) throw new Error('Failed to fetch stats from N8N');
     const data = await response.json();
-    // Giả sử N8N trả về mảng các object đơn hàng (hoặc ít nhất chứa status và ngày)
     if (Array.isArray(data)) {
       return data;
     }
-    // Nếu trả về object có chứa key data/orders
     if (data && Array.isArray(data.data)) return data.data;
     if (data && Array.isArray(data.orders)) return data.orders;
     
@@ -67,7 +69,6 @@ const formatItemsToString = (items: OrderItem[] | undefined): string => {
   }
   
   return items.map(i => {
-    // Nếu tên sản phẩm đã có chứa "SL:" hoặc "(SL: ...)" thì không add thêm quantity vào nữa
     const nameLower = i.productName.toLowerCase();
     if (nameLower.includes('sl:') || i.quantity <= 1) {
       return i.productName;
@@ -84,35 +85,32 @@ const mapOrderToSheetRow = (order: Partial<Order>) => {
   const noteValue = order.note || 'Đơn thường';
   const templateValue = order.templateStatus || 'Có mẫu';
   
-  // If ID is internal generated (_gen_), save as empty string
   let idToSave = order.id || '';
   if (idToSave.startsWith('_gen_')) {
     idToSave = '';
   }
   
   return [
-    idToSave,                                           // A: Mã đơn hàng (ID)
-    order.trackingCode || '',                           // B: Mã vận chuyển
-    order.carrier || '',                                // C: Đơn vị vận chuyển
-    order.createdAt || getLocalTodayStr(),              // D: Ngày
-    order.customerName || '',                           // E: Tên khách
-    order.customerPhone || '',                          // F: SĐT khách
-    order.address || '',                                // G: Địa chỉ
-    productString,                                      // H: Sản phẩm
-    order.platform || 'Shopee',                         // I: Nền tảng
-    order.totalAmount || 0,                             // J: Giá
-    statusValue,                                        // K: Trạng thái
-    deliveryValue,                                      // L: Thời gian giao
-    noteValue,                                          // M: Note
-    templateValue                                       // N: Mẫu
+    idToSave,                                           
+    order.trackingCode || '',                           
+    order.carrier || '',                                
+    order.createdAt || getLocalTodayStr(),              
+    order.customerName || '',                           
+    order.customerPhone || '',                          
+    order.address || '',                                
+    productString,                                      
+    order.platform || 'Shopee',                         
+    order.totalAmount || 0,                             
+    statusValue,                                        
+    deliveryValue,                                      
+    noteValue,                                          
+    templateValue                                       
   ];
 };
 
-// Helper function to map order to the specific N8N JSON format
 const mapOrderToN8NPayload = (order: Partial<Order>) => {
   const productString = formatItemsToString(order.items);
     
-  // If ID is internal generated (_gen_), send as empty string
   let idToSend = order.id || '';
   if (idToSend.startsWith('_gen_')) {
     idToSend = '';
@@ -139,7 +137,12 @@ const mapOrderToN8NPayload = (order: Partial<Order>) => {
 export const addOrdersToSheet = async (orders: Partial<Order>[]): Promise<boolean> => {
   try {
     const data = orders.map(mapOrderToSheetRow);
-    const payload = { action: 'add', data: data };
+    const payload = { 
+      action: 'add', 
+      data: data,
+      spreadsheetId: SHEET_ID,
+      sheetName: 'Sheet1'
+    };
 
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
@@ -216,7 +219,6 @@ export const sendDeleteOrdersToWebhook = async (orders: Order[]): Promise<boolea
   try {
     const mappedOrders = orders.map(mapOrderToN8NPayload);
 
-    // Using DELETE method as configured in N8N
     await fetch(N8N_DELETE_WEBHOOK_URL, {
       method: 'DELETE',
       headers: { 
@@ -236,13 +238,17 @@ export const sendDeleteOrdersToWebhook = async (orders: Order[]): Promise<boolea
 
 export const updateBatchOrdersInSheet = async (orders: Order[]): Promise<boolean> => {
   try {
-    // Gửi rowIndex để Script biết cập nhật dòng nào
     const updates = orders.map(order => ({
       id: order.rowIndex, 
       data: mapOrderToSheetRow(order)
     }));
 
-    const payload = { action: 'updateBatch', data: updates };
+    const payload = { 
+      action: 'updateBatch', 
+      data: updates,
+      spreadsheetId: SHEET_ID,
+      sheetName: 'Sheet1'
+    };
 
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
@@ -260,11 +266,15 @@ export const updateBatchOrdersInSheet = async (orders: Order[]): Promise<boolean
 
 export const deleteBatchOrdersFromSheet = async (rowIndexes: number[]): Promise<boolean> => {
   try {
-    // Sắp xếp Row Index giảm dần để xóa từ dưới lên trên, tránh lệch dòng
     const sortedRowIndices = rowIndexes.sort((a, b) => b - a);
 
     for (const rIndex of sortedRowIndices) {
-      const payload = { action: 'delete', id: rIndex };
+      const payload = { 
+        action: 'delete', 
+        id: rIndex,
+        spreadsheetId: SHEET_ID,
+        sheetName: 'Sheet1'
+      };
       
       await fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
@@ -272,7 +282,6 @@ export const deleteBatchOrdersFromSheet = async (rowIndexes: number[]): Promise<
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload),
       });
-      // Delay nhỏ
       await new Promise(r => setTimeout(r, 100));
     }
 
@@ -285,34 +294,31 @@ export const deleteBatchOrdersFromSheet = async (rowIndexes: number[]): Promise<
 
 const parseCSV = (text: string): Order[] => {
   const rows = text.split('\n');
-  if (rows.length < 2) return []; // Dòng 1 là tiêu đề
+  if (rows.length < 2) return [];
 
   const orders: Order[] = [];
 
-  // Bắt đầu từ i=1 (Dòng 2 trong Excel)
   for (let i = 1; i < rows.length; i++) {
     const rowStr = rows[i].trim();
     if (!rowStr) continue;
     
     const row = parseRow(rowStr);
     
-    // MAPPING CHÍNH XÁC: Cột A là ID
-    const idRaw = row[0];        // A
-    const trackingCode = row[1]; // B
-    const carrier = row[2];      // C
-    const dateRaw = row[3];      // D
-    const customerName = row[4]; // E
-    const customerPhone = row[5];// F
-    const address = row[6];      // G
-    const productName = row[7];  // H
-    const platformRaw = row[8];  // I
-    const priceRaw = row[9];     // J
-    const statusRawText = row[10];// K
-    const deliveryDeadline = row[11];// L
-    const note = row[12];        // M
-    const templateStatus = row[13];// N
+    const idRaw = row[0];        
+    const trackingCode = row[1]; 
+    const carrier = row[2];      
+    const dateRaw = row[3];      
+    const customerName = row[4]; 
+    const customerPhone = row[5];
+    const address = row[6];      
+    const productName = row[7];  
+    const platformRaw = row[8];  
+    const priceRaw = row[9];     
+    const statusRawText = row[10];
+    const deliveryDeadline = row[11];
+    const note = row[12];        
+    const templateStatus = row[13];
 
-    // Không ép kiểu enum, lấy nguyên văn
     const status = (statusRawText || '').trim() || 'Đã in bill';
     const price = parseCurrency(priceRaw);
     
@@ -323,13 +329,11 @@ const parseCSV = (text: string): Order[] => {
       price: price
     }];
 
-    // Sheet Row Index = i + 1 (Do header là dòng 1, mảng bắt đầu từ 0)
     const sheetRowIndex = i + 1;
 
     orders.push({
-      // Use _gen_ prefix for internal identification of empty rows
       id: idRaw || `_gen_${sheetRowIndex}`, 
-      rowIndex: sheetRowIndex,             // Lưu số dòng để xóa/sửa
+      rowIndex: sheetRowIndex,             
       trackingCode: trackingCode || '',
       carrier: carrier || '',
       customerName: customerName || 'Khách lẻ',
@@ -350,7 +354,136 @@ const parseCSV = (text: string): Order[] => {
   return orders;
 };
 
-const parseRow = (rowStr: string): string[] => {
+// --- TASCO FUNCTIONS ---
+
+export const fetchTascoFromSheet = async (): Promise<any[]> => {
+  try {
+    const response = await fetch(TASCO_CSV_URL);
+    if (!response.ok) throw new Error('Failed to fetch tasco sheet');
+    const text = await response.text();
+    return parseTascoCSV(text);
+  } catch (error) {
+    console.error('Error fetching tasco sheet:', error);
+    return [];
+  }
+};
+
+const parseTascoCSV = (text: string): any[] => {
+  const rows = text.split('\n');
+  if (rows.length < 2) return [];
+
+  const items: any[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const rowStr = rows[i].trim();
+    if (!rowStr) continue;
+    const row = parseRow(rowStr);
+    
+    // Mapping Columns for Tasco:
+    // A: ID, B: Name, C: Category, D: ParentId, E: Description, F: LogoUrl, G: Code, H: Status, I: CreatedAt
+    items.push({
+      id: row[0] || `T${i}`,
+      rowIndex: i + 1,
+      name: row[1] || '',
+      category: row[2] || 'BRAND',
+      parentId: row[3] || '',
+      description: row[4] || '',
+      logoUrl: row[5] || '',
+      code: row[6] || '',
+      status: (row[7] || 'Active') as 'Active' | 'Inactive',
+      createdAt: row[8] || getLocalTodayStr()
+    });
+  }
+  // Reverse to show newest first
+  return items.reverse();
+};
+
+const mapTascoToSheetRow = (item: any) => {
+  return [
+    item.id,
+    item.name,
+    item.category,
+    item.parentId || '',
+    item.description || '',
+    item.logoUrl || '',
+    item.code || '',
+    item.status || 'Active',
+    item.createdAt || getLocalTodayStr()
+  ];
+};
+
+export const addTascoItemToSheet = async (item: any): Promise<boolean> => {
+  try {
+    const rowData = mapTascoToSheetRow(item);
+    const payload = { 
+      action: 'add', 
+      sheetName: TASCO_SHEET_NAME, 
+      spreadsheetId: TASCO_SHEET_ID, 
+      data: [rowData] 
+    };
+
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+    });
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+};
+
+export const updateTascoItemInSheet = async (item: any): Promise<boolean> => {
+  try {
+    if (!item.rowIndex) return false;
+    const rowData = mapTascoToSheetRow(item);
+    
+    const payload = { 
+      action: 'updateBatch', 
+      sheetName: TASCO_SHEET_NAME, 
+      spreadsheetId: TASCO_SHEET_ID, 
+      data: [{ id: item.rowIndex, data: rowData }]
+    };
+
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+    });
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+};
+
+export const deleteTascoItemFromSheet = async (rowIndex: number): Promise<boolean> => {
+  try {
+    const payload = { 
+      action: 'delete', 
+      sheetName: TASCO_SHEET_NAME, 
+      spreadsheetId: TASCO_SHEET_ID, 
+      id: rowIndex 
+    };
+
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+    });
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+};
+
+// --- SHARED HELPERS ---
+
+export const parseRow = (rowStr: string): string[] => {
   const result: string[] = [];
   let current = '';
   let inQuote = false;

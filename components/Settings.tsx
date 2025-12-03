@@ -15,8 +15,15 @@ interface SettingsProps {
 
 const PERMISSION_GROUPS = [
   {
+    title: 'Dashboard',
+    items: [
+      { id: 'view_dashboard', label: 'Xem Dashboard (Tổng quan)' },
+    ]
+  },
+  {
     title: 'Đơn Hàng',
     items: [
+      { id: 'view_orders', label: 'Xem danh sách đơn hàng' },
       { id: 'add_orders', label: 'Thêm đơn hàng mới' },
       { id: 'edit_orders', label: 'Sửa & Cập nhật đơn hàng' },
     ]
@@ -25,6 +32,15 @@ const PERMISSION_GROUPS = [
     title: 'Khách Hàng',
     items: [
       { id: 'view_customers', label: 'Xem danh sách khách hàng' },
+    ]
+  },
+  {
+    title: 'Quản Lý Tasco',
+    items: [
+      { id: 'view_tasco', label: 'Xem danh sách Tasco' },
+      { id: 'add_tasco', label: 'Thêm mới Tasco' },
+      { id: 'edit_tasco', label: 'Chỉnh sửa Tasco' },
+      { id: 'delete_tasco', label: 'Xóa Tasco' },
     ]
   },
   {
@@ -199,7 +215,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateCurrentUser })
         email: '',
         phone: '',
         role: 'user',
-        permissions: ['add_orders', 'edit_orders', 'view_customers', 'view_settings_personal']
+        permissions: ['view_orders', 'add_orders', 'edit_orders', 'view_customers', 'view_settings_personal']
       });
     }
     setIsUserModalOpen(true);

@@ -107,7 +107,11 @@ export const extractOrderFromImage = async (base64Data: string, mimeType: string
       }
     });
 
-    const jsonText = response.text || "{}";
+    let jsonText = response.text || "{}";
+    // Strip markdown code blocks if present to ensure valid JSON parsing
+    if (jsonText.startsWith('```')) {
+      jsonText = jsonText.replace(/^```(json)?\s*/, '').replace(/\s*```$/, '');
+    }
     const result = JSON.parse(jsonText);
 
     // --- Post Processing for Delivery Deadline ---

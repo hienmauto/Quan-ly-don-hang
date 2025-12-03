@@ -51,7 +51,7 @@ export interface Order {
   templateStatus?: string; // Mẫu (Ví dụ: Có mẫu)
 }
 
-export type ViewState = 'dashboard' | 'orders' | 'customers' | 'settings';
+export type ViewState = 'dashboard' | 'orders' | 'customers' | 'tasco' | 'settings';
 
 export interface DashboardStats {
   totalRevenue: number;
@@ -65,18 +65,30 @@ export interface DashboardStats {
 export type Role = 'admin' | 'user' | string;
 
 export type Permission = 
+  | 'view_dashboard'  // Mới: Xem dashboard
+  | 'view_orders'     // Mới: Xem danh sách đơn hàng
   | 'add_orders'      // Mới: Thêm đơn
   | 'edit_orders'     // Mới: Sửa đơn/trạng thái
   | 'view_customers'
+  | 'view_tasco'      // Mới: Xem trang Tasco
+  | 'add_tasco'       // Mới: Thêm Tasco
+  | 'edit_tasco'      // Mới: Sửa Tasco
+  | 'delete_tasco'    // Mới: Xóa Tasco
   | 'view_settings_personal' // Mới: Cài đặt cá nhân
   | 'view_settings_admin'    // Mới: Cài đặt hệ thống (Admin)
   | 'view_settings_roles';   // Mới: Quản lý tên vai trò
 
 // Danh sách tất cả các quyền (Dùng để gán full quyền cho Admin)
 export const ALL_PERMISSIONS: Permission[] = [
+  'view_dashboard',
+  'view_orders',
   'add_orders',
   'edit_orders',
   'view_customers',
+  'view_tasco',
+  'add_tasco',
+  'edit_tasco',
+  'delete_tasco',
   'view_settings_personal',
   'view_settings_admin',
   'view_settings_roles'
@@ -91,4 +103,5 @@ export interface User {
   role: Role;
   permissions: Permission[];
   isActive: boolean;
+  rowIndex?: number; // Số dòng trong Google Sheet để định danh khi sửa/xóa
 }

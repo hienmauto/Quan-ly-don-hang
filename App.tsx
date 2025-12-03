@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, ShoppingCart, Users, Settings as SettingsIcon, 
-  Menu, Bell, PlusCircle, LogOut, Loader2, X, LogIn 
+  Menu, Bell, PlusCircle, LogOut, Loader2, X, LogIn, Layers 
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import { OrderList } from './components/OrderList';
@@ -10,6 +10,7 @@ import OrderModal from './components/OrderModal';
 import { Toast } from './components/Toast';
 import Login from './components/Login';
 import Settings from './components/Settings';
+import Tasco from './components/Tasco';
 import { Order, OrderStatus, Product, ViewState, User, Permission } from './types';
 import { getCurrentUser, logout as performLogout } from './services/authService';
 import { 
@@ -235,14 +236,10 @@ const App: React.FC = () => {
     setToast({ message: 'Lưu đơn hàng thành công!', type: 'success' });
   };
 
-  const SidebarItem = ({ view, icon: Icon, label, needsLogin = false }: { view: ViewState, icon: any, label: string, needsLogin?: boolean }) => {
-    let isVisible = true;
-    if (currentUser) {
-        if (view === 'customers' && !hasPermission('view_customers')) isVisible = false;
-        if (view === 'settings' && (!hasPermission('view_settings_personal') && !hasPermission('view_settings_admin'))) isVisible = false;
-    }
-    
-    if (!isVisible) return null;
+  const SidebarItem = ({ view, icon: Icon, label, needsLogin = false, permission }: { view: ViewState, icon: any, label: string, needsLogin?: boolean, permission?: Permission }) => {
+    // Hide logic for non-logged-in users or unauthorized users
+    if (needsLogin && !currentUser) return null;
+    if (currentUser && permission && !hasPermission(permission)) return null;
 
     return (
       <button
@@ -259,7 +256,9 @@ const App: React.FC = () => {
           ${currentView === view 
             ? 'bg-red-600 text-white shadow-md' 
             : 'text-gray-600 hover:bg-red-50 hover:text-red-600'
-          }`}
+          }
+          ${!isSidebarOpen ? 'justify-center px-2' : ''}
+        `}
       >
         <Icon size={20} className={currentView === view ? 'text-white' : 'text-gray-500 group-hover:text-red-600'} />
         <span className={`font-medium ${!isSidebarOpen && 'hidden md:hidden'}`}>{label}</span>
@@ -328,8 +327,9 @@ const App: React.FC = () => {
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
           <SidebarItem view="dashboard" icon={LayoutDashboard} label="Tổng Quan" />
           <SidebarItem view="orders" icon={ShoppingCart} label="Đơn Hàng" />
-          <SidebarItem view="customers" icon={Users} label="Khách Hàng" needsLogin={true} />
-          <SidebarItem view="settings" icon={SettingsIcon} label="Cài Đặt" needsLogin={true} />
+          <SidebarItem view="customers" icon={Users} label="Khách Hàng" needsLogin={true} permission="view_customers" />
+          <SidebarItem view="tasco" icon={Layers} label="Tasco" needsLogin={true} permission="view_tasco" />
+          <SidebarItem view="settings" icon={SettingsIcon} label="Cài Đặt" needsLogin={true} permission="view_settings_personal" />
         </nav>
 
         {currentUser && (
@@ -355,7 +355,7 @@ const App: React.FC = () => {
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors md:hidden"
+              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <Menu size={20} />
             </button>
@@ -363,6 +363,7 @@ const App: React.FC = () => {
               {currentView === 'dashboard' && 'Dashboard'}
               {currentView === 'orders' && 'Quản Lý Đơn Hàng'}
               {currentView === 'customers' && 'Danh Sách Khách Hàng'}
+              {currentView === 'tasco' && 'Quản Lý Tasco'}
               {currentView === 'settings' && 'Cài Đặt Hệ Thống'}
             </h2>
           </div>
@@ -377,22 +378,24 @@ const App: React.FC = () => {
               {isLoading ? <Loader2 size={20} /> : <Bell size={20} />}
             </button>
             
-            {/* Create Order Button */}
-            <button 
-              onClick={handleAddOrder}
-              className="hidden sm:flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-all shadow-sm font-medium"
-            >
-              <PlusCircle size={18} />
-              <span>Tạo Đơn Mới</span>
-            </button>
-            
-            {/* Create Order Icon (Mobile) */}
-            <button 
-              onClick={handleAddOrder}
-              className="sm:hidden flex items-center justify-center bg-red-600 text-white w-9 h-9 rounded-full shadow-sm"
-            >
-              <PlusCircle size={20} />
-            </button>
+            {/* Create Order Button - Only visible if has permission */}
+            {hasPermission('add_orders') && (
+              <>
+                <button 
+                  onClick={handleAddOrder}
+                  className="hidden sm:flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-all shadow-sm font-medium"
+                >
+                  <PlusCircle size={18} />
+                  <span>Tạo Đơn Mới</span>
+                </button>
+                <button 
+                  onClick={handleAddOrder}
+                  className="sm:hidden flex items-center justify-center bg-red-600 text-white w-9 h-9 rounded-full shadow-sm"
+                >
+                  <PlusCircle size={20} />
+                </button>
+              </>
+            )}
 
             {/* Profile Dropdown or Login Button */}
             {currentUser ? (
@@ -416,12 +419,14 @@ const App: React.FC = () => {
                       <p className="text-sm font-bold text-gray-800">{currentUser.fullName}</p>
                       <p className="text-xs text-gray-500 capitalize">{currentUser.role}</p>
                     </div>
-                    <button 
-                      onClick={() => { setCurrentView('settings'); setIsProfileMenuOpen(false); }}
-                      className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <SettingsIcon size={16} /> Cài đặt tài khoản
-                    </button>
+                    {hasPermission('view_settings_personal') && (
+                      <button 
+                        onClick={() => { setCurrentView('settings'); setIsProfileMenuOpen(false); }}
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <SettingsIcon size={16} /> Cài đặt tài khoản
+                      </button>
+                    )}
                     <button 
                       onClick={handleLogout}
                       className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
@@ -445,19 +450,19 @@ const App: React.FC = () => {
 
         {/* View Content */}
         {/* Updated: Use overflow-y-auto for Dashboard/Settings to allow scrolling on Mobile. Keep overflow-hidden for Orders. */}
-        <div className={`flex-1 p-4 md:p-6 relative w-full ${currentView === 'orders' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
+        <div className={`flex-1 p-4 md:p-6 relative w-full ${currentView === 'orders' || currentView === 'tasco' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
           {currentView === 'dashboard' && <Dashboard orders={orders} />}
           
           {currentView === 'orders' && (
-            <OrderList 
-              orders={orders} 
-              onEdit={handleEditOrder} 
-              onDelete={handleDeleteOrder}
-              onStatusChange={handleStatusChange}
-              onBulkUpdate={handleBulkUpdate}
-              onBulkDelete={handleBulkDelete}
-              onRefresh={handleRefreshData}
-            />
+              <OrderList 
+                orders={orders} 
+                onEdit={handleEditOrder} 
+                onDelete={handleDeleteOrder}
+                onStatusChange={handleStatusChange}
+                onBulkUpdate={handleBulkUpdate}
+                onBulkDelete={handleBulkDelete}
+                onRefresh={handleRefreshData}
+              />
           )}
 
           {currentView === 'customers' && (
@@ -465,6 +470,10 @@ const App: React.FC = () => {
               <Users size={48} className="mb-4 text-gray-300" />
               <p className="text-lg font-medium">Quản lý khách hàng đang được phát triển</p>
             </div>
+          )}
+
+          {currentView === 'tasco' && currentUser && (
+             <Tasco currentUser={currentUser} />
           )}
 
           {currentView === 'settings' && currentUser && (
