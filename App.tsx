@@ -449,8 +449,8 @@ const App: React.FC = () => {
         </header>
 
         {/* View Content */}
-        {/* Updated: Use overflow-y-auto for Dashboard/Settings to allow scrolling on Mobile. Keep overflow-hidden for Orders. */}
-        <div className={`flex-1 p-4 md:p-6 relative w-full ${currentView === 'orders' || currentView === 'tasco' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
+        {/* Updated: Use overflow-y-auto for Dashboard/Settings/Tasco to allow scrolling on Mobile. Keep overflow-hidden for Orders (it has its own table scroll). */}
+        <div className={`flex-1 p-4 md:p-6 relative w-full ${currentView === 'orders' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
           {currentView === 'dashboard' && <Dashboard orders={orders} />}
           
           {currentView === 'orders' && (

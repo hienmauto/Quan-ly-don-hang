@@ -434,6 +434,29 @@ export const addTascoItemToSheet = async (item: any): Promise<boolean> => {
   }
 };
 
+export const addBatchTascoItemsToSheet = async (items: any[]): Promise<boolean> => {
+  try {
+    const data = items.map(mapTascoToSheetRow);
+    const payload = { 
+      action: 'add', 
+      sheetName: TASCO_SHEET_NAME, 
+      spreadsheetId: TASCO_SHEET_ID, 
+      data: data 
+    };
+
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+    });
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+};
+
 export const updateTascoItemInSheet = async (item: any): Promise<boolean> => {
   try {
     if (!item.rowIndex) return false;
