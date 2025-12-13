@@ -1,5 +1,6 @@
 
-import { Order, OrderStatus, OrderItem } from '../types';
+
+import { Order, OrderStatus, OrderItem, SummaryRecord, Platform } from '../types';
 
 const SHEET_ID = '1HARjln1eTmMPJo1WX6n0KHX-UtLst0PPB8LgBy4-5CQ';
 const SHEET_GID = '1857148256';
@@ -9,6 +10,11 @@ const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=
 const TASCO_SHEET_ID = '17ViwoLY03r7HzopWidYzR1Fl02EYq8Bx2fggaivpkhc';
 const TASCO_SHEET_NAME = 'Trang tính1'; // Cập nhật tên sheet chính xác từ screenshot
 const TASCO_CSV_URL = `https://docs.google.com/spreadsheets/d/${TASCO_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(TASCO_SHEET_NAME)}`;
+
+// --- CONFIG CHO SUMMARY SHEET ---
+const SUMMARY_SHEET_NAME = 'Summary'; // Tab mới cho tổng kết
+// Lưu ý: Dùng chung Spreadsheet ID với TASCO hoặc SHEET_ID chính đều được, ở đây dùng chung với SHEET_ID chính
+const SUMMARY_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SUMMARY_SHEET_NAME)}`;
 
 // URL Script - Đã cập nhật
 export const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby_kglUd-3CViKNSoARFydIuJ1lW0SGNI0NjkvkBc9K4AXYVEWcM5N5lm2oil36xLmLkQ/exec'; 
@@ -536,6 +542,124 @@ export const deleteTascoItemFromSheet = async (rowIndex: number): Promise<boolea
     console.error(e);
     return false;
   }
+};
+
+// --- SUMMARY FUNCTIONS ---
+
+// Map Summary to Sheet Row
+// Order: MonthKey, Platform, TotalRevenue, TotalOrders, CancelledOrders, ReturnedOrders, CancelledAmount, ReturnedAmount, AdSpend
+const mapSummaryToSheetRow = (record: SummaryRecord) => {
+  return [
+    record.monthKey,
+    record.platform,
+    record.totalRevenue,
+    record.totalOrders,
+    record.cancelledOrders,
+    record.returnedOrders,
+    record.cancelledAmount,
+    record.returnedAmount,
+    record.adSpend
+  ];
+};
+
+export const fetchSummaryFromSheet = async (): Promise<SummaryRecord[]> => {
+  try {
+    const response = await fetch(SUMMARY_CSV_URL);
+    if (!response.ok) {
+       console.warn('Could not fetch summary sheet (might not exist yet).');
+       return [];
+    }
+    const text = await response.text();
+    return parseSummaryCSV(text);
+  } catch (error) {
+    console.error('Error fetching summary sheet:', error);
+    return [];
+  }
+};
+
+export const saveSummaryToSheet = async (records: SummaryRecord[]): Promise<boolean> => {
+  try {
+    // Để đơn giản và tránh phức tạp khi update từng dòng lẻ tẻ, 
+    // chúng ta có thể dùng logic: Tìm record cũ của tháng+platform đó để update, nếu chưa có thì add.
+    // Tuy nhiên, GAS script hỗ trợ updateBatch nếu biết ID (rowIndex).
+    // Do đó flow sẽ là: Component Summary load data về (có rowIndex), user bấm Save -> gọi hàm này.
+    
+    const updates: {id: number, data: any[]}[] = [];
+    const newItems: any[][] = [];
+
+    records.forEach(rec => {
+      const rowData = mapSummaryToSheetRow(rec);
+      if (rec.rowIndex) {
+        updates.push({ id: rec.rowIndex, data: rowData });
+      } else {
+        newItems.push(rowData);
+      }
+    });
+
+    // 1. Process Updates
+    if (updates.length > 0) {
+      const payloadUpdate = { 
+        action: 'updateBatch', 
+        sheetName: SUMMARY_SHEET_NAME, 
+        spreadsheetId: SHEET_ID, 
+        data: updates
+      };
+      await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payloadUpdate),
+      });
+    }
+
+    // 2. Process New Items
+    if (newItems.length > 0) {
+      const payloadAdd = { 
+        action: 'add', 
+        sheetName: SUMMARY_SHEET_NAME, 
+        spreadsheetId: SHEET_ID, 
+        data: newItems 
+      };
+      await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payloadAdd),
+      });
+    }
+
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+};
+
+const parseSummaryCSV = (text: string): SummaryRecord[] => {
+  const rows = text.split('\n');
+  if (rows.length < 2) return [];
+
+  const records: SummaryRecord[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const rowStr = rows[i].trim();
+    if (!rowStr) continue;
+    const row = parseRow(rowStr);
+    
+    // Structure: MonthKey, Platform, Rev, Order, CancelQty, ReturnQty, CancelAmt, ReturnAmt, AdSpend
+    records.push({
+      rowIndex: i + 1,
+      monthKey: row[0] || '',
+      platform: (row[1] as Platform) || 'Shopee',
+      totalRevenue: Number(row[2]) || 0,
+      totalOrders: Number(row[3]) || 0,
+      cancelledOrders: Number(row[4]) || 0,
+      returnedOrders: Number(row[5]) || 0,
+      cancelledAmount: Number(row[6]) || 0,
+      returnedAmount: Number(row[7]) || 0,
+      adSpend: Number(row[8]) || 0
+    });
+  }
+  return records;
 };
 
 // --- SHARED HELPERS ---

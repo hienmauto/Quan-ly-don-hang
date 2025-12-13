@@ -1,8 +1,9 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, ShoppingCart, Users, Settings as SettingsIcon, 
-  Menu, Bell, PlusCircle, LogOut, Loader2, X, LogIn, Layers 
+  Menu, Bell, PlusCircle, LogOut, Loader2, X, LogIn, Layers, BarChart4
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import { OrderList } from './components/OrderList';
@@ -11,6 +12,7 @@ import { Toast } from './components/Toast';
 import Login from './components/Login';
 import Settings from './components/Settings';
 import Tasco from './components/Tasco';
+import Summary from './components/Summary';
 import { Order, OrderStatus, Product, ViewState, User, Permission } from './types';
 import { getCurrentUser, logout as performLogout } from './services/authService';
 import { 
@@ -329,6 +331,7 @@ const App: React.FC = () => {
           <SidebarItem view="orders" icon={ShoppingCart} label="Đơn Hàng" />
           <SidebarItem view="customers" icon={Users} label="Khách Hàng" needsLogin={true} permission="view_customers" />
           <SidebarItem view="tasco" icon={Layers} label="Tasco" needsLogin={true} permission="view_tasco" />
+          <SidebarItem view="summary" icon={BarChart4} label="Tổng Kết" needsLogin={true} permission="view_summary" />
           <SidebarItem view="settings" icon={SettingsIcon} label="Cài Đặt" needsLogin={true} permission="view_settings_personal" />
         </nav>
 
@@ -364,6 +367,7 @@ const App: React.FC = () => {
               {currentView === 'orders' && 'Quản Lý Đơn Hàng'}
               {currentView === 'customers' && 'Danh Sách Khách Hàng'}
               {currentView === 'tasco' && 'Quản Lý Tasco'}
+              {currentView === 'summary' && 'Tổng Kết Doanh Thu'}
               {currentView === 'settings' && 'Cài Đặt Hệ Thống'}
             </h2>
           </div>
@@ -474,6 +478,10 @@ const App: React.FC = () => {
 
           {currentView === 'tasco' && currentUser && (
              <Tasco currentUser={currentUser} />
+          )}
+
+          {currentView === 'summary' && currentUser && (
+             <Summary />
           )}
 
           {currentView === 'settings' && currentUser && (

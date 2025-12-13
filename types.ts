@@ -51,13 +51,33 @@ export interface Order {
   templateStatus?: string; // Mẫu (Ví dụ: Có mẫu)
 }
 
-export type ViewState = 'dashboard' | 'orders' | 'customers' | 'tasco' | 'settings';
+export type ViewState = 'dashboard' | 'orders' | 'customers' | 'tasco' | 'summary' | 'settings';
 
 export interface DashboardStats {
   totalRevenue: number;
   totalOrders: number;
   pendingOrders: number;
   avgOrderValue: number;
+}
+
+// --- SUMMARY TYPES ---
+// Updated: Platform is now just a string to allow custom platforms
+export type Platform = string;
+
+export interface PlatformMetrics {
+  totalRevenue: number;
+  totalOrders: number;
+  cancelledOrders: number;
+  returnedOrders: number;
+  cancelledAmount: number;
+  returnedAmount: number;
+  adSpend: number;
+}
+
+export interface SummaryRecord extends PlatformMetrics {
+  monthKey: string; // Format: YYYY-MM
+  platform: Platform;
+  rowIndex?: number;
 }
 
 // --- AUTH TYPES ---
@@ -74,6 +94,8 @@ export type Permission =
   | 'add_tasco'       // Mới: Thêm Tasco
   | 'edit_tasco'      // Mới: Sửa Tasco
   | 'delete_tasco'    // Mới: Xóa Tasco
+  | 'view_summary'    // Mới: Xem trang tổng kết
+  | 'edit_summary'    // Mới: Sửa trang tổng kết
   | 'view_settings_personal' // Mới: Cài đặt cá nhân
   | 'view_settings_admin'    // Mới: Cài đặt hệ thống (Admin)
   | 'view_settings_roles';   // Mới: Quản lý tên vai trò
@@ -89,6 +111,8 @@ export const ALL_PERMISSIONS: Permission[] = [
   'add_tasco',
   'edit_tasco',
   'delete_tasco',
+  'view_summary',
+  'edit_summary',
   'view_settings_personal',
   'view_settings_admin',
   'view_settings_roles'
