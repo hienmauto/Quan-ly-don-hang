@@ -1,5 +1,4 @@
 
-
 import { Order, OrderStatus, OrderItem, SummaryRecord, Platform } from '../types';
 
 const SHEET_ID = '1HARjln1eTmMPJo1WX6n0KHX-UtLst0PPB8LgBy4-5CQ';
@@ -25,6 +24,7 @@ const N8N_UPDATE_ONE_WEBHOOK_URL = 'https://n8n.hienmauto.com/webhook/quan-ly-do
 const N8N_UPDATE_BULK_WEBHOOK_URL = 'https://n8n.hienmauto.com/webhook/quan-ly-don-hang/update-nhieu-don';
 const N8N_DELETE_WEBHOOK_URL = 'https://n8n.hienmauto.com/webhook/quan-ly-don-hang/xoa-don';
 const N8N_STATS_WEBHOOK_URL = 'https://n8n.hienmauto.com/webhook/quan-ly-don-hang/don-da-gui';
+const N8N_IMAGE_TO_ORDER_WEBHOOK_URL = 'https://n8n.hienmauto.com/webhook/image-to-order';
 
 // --- ORDERS FUNCTIONS ---
 
@@ -45,17 +45,120 @@ export const fetchN8NStatsData = async (): Promise<any[]> => {
   try {
     const response = await fetch(N8N_STATS_WEBHOOK_URL);
     if (!response.ok) throw new Error('Failed to fetch stats from N8N');
-    const data = await response.json();
-    if (Array.isArray(data)) {
-      return data;
-    }
-    if (data && Array.isArray(data.data)) return data.data;
-    if (data && Array.isArray(data.orders)) return data.orders;
+    const text = await response.text();
+    if (!text) return [];
     
-    return [];
+    try {
+        const data = JSON.parse(text);
+        if (Array.isArray(data)) {
+          return data;
+        }
+        if (data && Array.isArray(data.data)) return data.data;
+        if (data && Array.isArray(data.orders)) return data.orders;
+        return [];
+    } catch (e) {
+        console.error('Error parsing stats JSON', e);
+        return [];
+    }
   } catch (error) {
     console.error('Error fetching N8N stats:', error);
     return [];
+  }
+};
+
+// --- N8N IMAGE ANALYSIS ---
+
+export const analyzeFileWithN8N = async (file: File): Promise<Partial<Order>[] | null> => {
+  try {
+    // 1. Convert file to base64
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+      reader.readAsDataURL(file);
+    });
+
+    // 2. Send payload to N8N
+    // Updated: Wrap in an array as required by the N8N workflow input format [ { data, mimeType, fileName } ]
+    const payload = [{
+      data: base64Data,
+      mimeType: file.type,
+      fileName: file.name
+    }];
+
+    const response = await fetch(N8N_IMAGE_TO_ORDER_WEBHOOK_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`N8N webhook failed: ${response.statusText}`);
+    }
+
+    // Fix: Read text first to avoid "Unexpected end of JSON input"
+    const text = await response.text();
+    if (!text || text.trim() === '') {
+        console.warn('N8N returned empty response');
+        return null;
+    }
+
+    let result;
+    try {
+        result = JSON.parse(text);
+    } catch (e) {
+        console.error('Failed to parse N8N response:', text);
+        // Fallback or return null
+        return null;
+    }
+    
+    // 3. Normalize Response
+    // Expecting N8N to return either { orders: [...] } or an array [...] or a single object
+    let extractedOrders: any[] = [];
+
+    if (result.orders && Array.isArray(result.orders)) {
+      extractedOrders = result.orders;
+    } else if (Array.isArray(result)) {
+      extractedOrders = result;
+    } else if (typeof result === 'object' && result !== null) {
+      // Check if it's a single order object wrapped in structure or just the order
+      if (result.data && Array.isArray(result.data)) {
+         extractedOrders = result.data;
+      } else {
+         extractedOrders = [result];
+      }
+    }
+
+    // Map raw data to Partial<Order> to ensure compatibility
+    // Added Vietnamese keys support based on N8N response structure
+    return extractedOrders.map(raw => ({
+      id: raw.id || raw['Mã đơn hàng'] || raw.trackingCode || '', 
+      trackingCode: raw.trackingCode || raw['Mã vận chuyển'] || raw.id || '',
+      carrier: raw.carrier || raw['Đơn vị vận chuyển'] || '',
+      customerName: raw.customerName || raw['Tên khách'] || '',
+      customerPhone: raw.customerPhone || raw['SĐT khách'] || '',
+      address: raw.address || raw['Địa chỉ'] || '',
+      platform: raw.platform || raw['Nền tảng'] || 'Shopee',
+      totalAmount: typeof raw.totalAmount === 'number' ? raw.totalAmount : (parseInt(raw.totalAmount || raw['Giá']) || 0),
+      createdAt: raw.createdAt || raw['Ngày'] || getLocalTodayStr(),
+      note: raw.note || raw['Note'] || 'Đơn thường',
+      // Handle items: 
+      // 1. Array 'items'
+      // 2. Single 'productName'
+      // 3. Single 'Sản phẩm' (Vietnamese key)
+      items: Array.isArray(raw.items) ? raw.items : (
+          raw.productName ? [{ productName: raw.productName, quantity: raw.quantity || 1, price: 0 }] : 
+          (raw['Sản phẩm'] ? [{ productName: raw['Sản phẩm'], quantity: 1, price: 0 }] : [])
+      ),
+      templateStatus: raw.templateStatus || raw['Mẫu'] || 'Có mẫu',
+      deliveryDeadline: raw.deliveryDeadline || raw['Thời gian giao hàng'] || 'Trước 23h59p'
+    }));
+
+  } catch (error) {
+    console.error('Error analyzing file with N8N:', error);
+    return null;
   }
 };
 

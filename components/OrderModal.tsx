@@ -1,9 +1,9 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Plus, Trash2, Upload, Loader2, Save, Download, Search, Image as ImageIcon, FileText } from 'lucide-react';
 import { Order, OrderStatus, OrderItem, Product } from '../types';
-import { extractOrderFromImage } from '../services/geminiService';
-import { addOrdersToSheet, sendOrdersToWebhook } from '../services/sheetService';
+import { addOrdersToSheet, sendOrdersToWebhook, analyzeFileWithN8N } from '../services/sheetService';
 
 interface OrderModalProps {
   isOpen: boolean;
@@ -218,27 +218,19 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
 
     try {
       for (const file of pendingFiles) {
-        const reader = new FileReader();
-        const extracted = await new Promise<Partial<Order>[] | null>((resolve) => {
-          reader.onload = async () => {
-            const base64String = reader.result as string;
-            const base64Data = base64String.split(',')[1];
-            const mimeType = file.type;
-            const result = await extractOrderFromImage(base64Data, mimeType);
-            resolve(result);
-          };
-          reader.readAsDataURL(file);
-        });
+        // Use new N8N service instead of local Gemini
+        const extracted = await analyzeFileWithN8N(file);
 
         if (extracted && extracted.length > 0) {
           extracted.forEach(o => {
             newOrders.push({
               ...o,
+              // Fallbacks in case N8N doesn't return these defaults
               id: o.id || `DH-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-              status: OrderStatus.PRINTED, // Default: Đã in bill
+              status: OrderStatus.PRINTED,
               paymentMethod: 'COD',
               items: o.items && o.items.length > 0 ? o.items : [],
-              createdAt: o.createdAt || getTodayStr(), // Use new format
+              createdAt: o.createdAt || getTodayStr(), 
               note: o.note || 'Đơn thường',
               templateStatus: o.templateStatus || 'Có mẫu',
               deliveryDeadline: o.deliveryDeadline || 'Trước 23h59p',
@@ -253,7 +245,7 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
 
     } catch (error) {
       console.error(error);
-      alert("Đã có lỗi xảy ra khi xử lý file.");
+      alert("Đã có lỗi xảy ra khi xử lý file với N8N.");
       setIsUploadPopupOpen(true); // Re-open popup on error
     } finally {
       setIsProcessing(false);
@@ -340,7 +332,7 @@ const OrderModal: React.FC<OrderModalProps> = ({ isOpen, onClose, onSubmit, init
                    {isProcessing ? (
                      <div className="flex items-center justify-center gap-2 py-1">
                         <Loader2 className="animate-spin" size={20} />
-                        <span className="font-medium">Đang phân tích {pendingFiles.length > 0 ? pendingFiles.length : ''} file...</span>
+                        <span className="font-medium">Đang phân tích {pendingFiles.length > 0 ? pendingFiles.length : ''} file với N8N...</span>
                      </div>
                    ) : (
                      <div className="flex items-center justify-center gap-2 py-1">
