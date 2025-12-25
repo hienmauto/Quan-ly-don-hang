@@ -140,7 +140,7 @@ export const analyzeFileWithN8N = async (file: File): Promise<Partial<Order>[] |
       customerName: raw.customerName || raw['Tên khách'] || '',
       customerPhone: raw.customerPhone || raw['SĐT khách'] || '',
       address: raw.address || raw['Địa chỉ'] || '',
-      platform: raw.platform || raw['Nền tảng'] || 'Shopee',
+      platform: mapPlatform(raw.platform || raw['Nền tảng']), // Normalized platform
       totalAmount: typeof raw.totalAmount === 'number' ? raw.totalAmount : (parseInt(raw.totalAmount || raw['Giá']) || 0),
       createdAt: raw.createdAt || raw['Ngày'] || getLocalTodayStr(),
       note: raw.note || raw['Note'] || 'Đơn thường',
